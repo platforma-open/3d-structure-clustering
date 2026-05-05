@@ -1,0 +1,338 @@
+// 3D Structure Clustering — root workflow.
+//
+// Inputs:
+//   args.dataset = PrimaryRef { column: <PDB ResourceMap PlRef>, filter?: <confident subset PlRef> }
+//   args.enrichments = LabeledEnrichmentRefs (cdrh3Length, AIRR fields — Stage 1 ignores)
+//   args.tmScoreThreshold, args.coverageThreshold, args.clusteringMode,
+//   args.cdrh3LengthStratify, args.cpu, args.mem
+//
+// Pipeline:
+//   1. Resolve the dataset's column spec to learn the clonotype axis.
+//   2. Build a confident-keys TSV via tableBuilder (PrimaryRef filter applied).
+//   3. processColumn over the PDB ResourceMap aggregating the clonotype axis,
+//      so the body sees every PDB in a single invocation. The body filters by
+//      the confident-keys TSV, runs FoldSeek, and emits cluster TSVs.
+//   4. Import cluster_assignments / cluster_summary as PColumns; expose the
+//      centroid PDB ResourceMap built by the workdir processor.
+//
+// Stage 1 deferrals:
+//   - CDRH3-length stratification (toggle is off by default in the model).
+//   - AIRR export (separate ephemeral, follows the same shape).
+//   - clusterRepresentative subset PColumn (derive from cluster_assignments).
+//   - Anonymization (cluster IDs are stable across re-runs of the same pipeline
+//     because FoldSeek is deterministic; cross-project anonymization is a
+//     polish iteration).
+
+wf := import("@platforma-sdk/workflow-tengo:workflow")
+assets := import("@platforma-sdk/workflow-tengo:assets")
+pframes := import("@platforma-sdk/workflow-tengo:pframes")
+xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
+pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
+
+clusteringTpl := assets.importTemplate(":clustering")
+
+wf.prepare(func(args) {
+	bb := wf.createPBundleBuilder()
+	bb.ignoreMissingDomains()
+	// Anchor directly on the predicted PDB column — its clonotypeKey axis is
+	// what we cluster on, and the chain (IGH/IGK/...) is encoded in the axis
+	// domain so dropdown labels surface chain naturally.
+	bb.addAnchor("main", args.dataset)
+	return { columns: bb.build() }
+})
+
+wf.body(func(args) {
+	columns := args.columns
+	pdbSpec := columns.getSpec(args.dataset)
+	clonotypeAxisSpec := pdbSpec.axesSpec[0]
+	clonotypeAxisName := clonotypeAxisSpec.name
+
+	blockId := wf.blockId().getDataAsJson()
+
+	// Inputs forwarded to the clustering body.
+	// Stage 1 deferral: the upstream confident-subset filter (args.dataset.filter)
+	// is not threaded here — every PDB in the upstream ResourceMap is clustered.
+	extraInputs := {
+		tmScoreThreshold: args.tmScoreThreshold,
+		coverageThreshold: args.coverageThreshold,
+		clusteringMode: args.clusteringMode,
+		cpu: args.cpu,
+		mem: args.mem
+	}
+
+	// processColumn over the PDB ResourceMap, aggregating on the clonotype axis
+	// so the body gets all entries in one invocation. We expose four targeted
+	// outputs from the body (the cluster TSVs + the centroid ResourceMap) and
+	// pull them out below.
+	resolvedPdb := columns.getColumn(args.dataset)
+	clusteringResult := pframes.processColumn(
+		resolvedPdb,
+		clusteringTpl,
+		[
+			{ type: "Resource", name: "clusterAssignments",
+				spec: { kind: "PColumn", name: "_internal/clusterAssignmentsTsv", valueType: "File" } },
+			{ type: "Resource", name: "clusterSummary",
+				spec: { kind: "PColumn", name: "_internal/clusterSummaryTsv", valueType: "File" } },
+			{ type: "Resource", name: "centroidsManifest",
+				spec: { kind: "PColumn", name: "_internal/centroidsManifestTsv", valueType: "File" } },
+			{ type: "Resource", name: "centroidPdbsMap",
+				spec: { kind: "PColumn", name: "pl7.app/structure/centroidPdb",
+					valueType: "File",
+					domain: { "pl7.app/structure/numbering": "imgt" },
+					annotations: {
+						"pl7.app/label": "Centroid 3D Structure",
+						"pl7.app/structure/numbering": "imgt"
+					}
+				}
+			},
+			{ type: "Resource", name: "summary",
+				spec: { kind: "PColumn", name: "_internal/clusteringSummaryJson", valueType: "Json" } },
+			{ type: "Resource", name: "log",
+				spec: { kind: "PColumn", name: "pl7.app/log", valueType: "Log" } }
+		],
+		{
+			aggregate: [{ name: clonotypeAxisName }],
+			extra: extraInputs,
+			isEphemeral: true
+		}
+	)
+
+	// Cluster ID axis spec — used as the index axis for cluster-level columns
+	// and as the row axis of the centroid PDB ResourceMap.
+	clusterIdAxisSpec := {
+		name: "pl7.app/structure/clusterId",
+		type: "String",
+		domain: {
+			"pl7.app/structure/clustering/algorithm": "foldseek",
+			"pl7.app/structure/clustering/blockId": blockId
+		},
+		annotations: {
+			"pl7.app/label": "Cluster ID",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "990000"
+		}
+	}
+
+	trace := pSpec.makeTrace(
+		pdbSpec,
+		{
+			type: "milaboratories.3d-structure-clustering",
+			id: blockId,
+			importance: 30,
+			label: "3D Structure Clustering"
+		}
+	)
+
+	// processColumn wraps every "Resource" output in a 0-key
+	// `PColumnData/ResourceMap` whose inner blob lives at field `"[]"`. We need
+	// the inner blob (a real File resource) to feed xsv.importFile / parseResourceMap.
+	// `pframes.util.EMPTY_JSON_KEY` is the canonical name for that field.
+	emptyKey := "[]"
+	unwrap := func(name) {
+		return clusteringResult.outputData(name).getFutureInputField(emptyKey)
+	}
+
+	// Import cluster_assignments.tsv → per-clonotype columns on [clonotypeKey].
+	// The clusterId here is a plain String column whose values match the
+	// clusterId axis (same domain) — it is NOT the linker. The actual linker
+	// is built below as a 2-axis column on [clusterId, clonotypeKey], which is
+	// what `linker_index` in pframes-rs requires (the "2 connected components"
+	// constraint). Pattern mirrors clonotype-clustering's cloneToClusterLinkPf.
+	clusterAssignmentsTsv := unwrap("clusterAssignments")
+	clusterAssignmentsPf := xsv.importFile(clusterAssignmentsTsv, "tsv", {
+		axes: [{ column: "clonotypeKey", spec: clonotypeAxisSpec }],
+		columns: [
+			{
+				column: "clusterLabel",
+				spec: {
+					valueType: "String",
+					name: "pl7.app/structure/clusterId",
+					domain: clusterIdAxisSpec.domain,
+					annotations: {
+						"pl7.app/label": "Cluster ID",
+						"pl7.app/structure/clusteringSource": "foldseek"
+					}
+				}
+			},
+			{
+				column: "isCentroid",
+				spec: {
+					valueType: "Int",
+					name: "pl7.app/structure/clustering/isCentroid",
+					annotations: {
+						"pl7.app/label": "Is centroid",
+						"pl7.app/table/visibility": "hidden"
+					}
+				}
+			},
+			{
+				column: "tmDistanceToCentroid",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/tmDistanceToCentroid",
+					annotations: {
+						"pl7.app/label": "TM-distance to centroid",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/rankingOrder": "decreasing"
+					}
+				}
+			},
+			{
+				column: "tmScoreToCentroid",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/tmScoreToCentroid",
+					annotations: {
+						"pl7.app/label": "TM-score to centroid",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/table/visibility": "optional"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet"
+	}, { splitDataAndSpec: true })
+
+	// Import cluster_summary.tsv → cluster-level columns on [clusterId].
+	clusterSummaryTsv := unwrap("clusterSummary")
+	clusterSummaryPf := xsv.importFile(clusterSummaryTsv, "tsv", {
+		axes: [{ column: "clusterId", spec: clusterIdAxisSpec }],
+		columns: [
+			{
+				column: "clusterLabel",
+				spec: {
+					valueType: "String",
+					name: "pl7.app/label",
+					annotations: {
+						"pl7.app/label": "Cluster ID",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "990000"
+					}
+				}
+			},
+			{
+				column: "size",
+				spec: {
+					valueType: "Long",
+					name: "pl7.app/structure/clustering/clusterSize",
+					annotations: {
+						"pl7.app/label": "Cluster size",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "9000",
+						"pl7.app/isAbundance": "true"
+					}
+				}
+			},
+			{
+				column: "radius",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/clusterRadius",
+					annotations: {
+						"pl7.app/label": "Cluster radius (TM-dist)",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/rankingOrder": "decreasing",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "8000"
+					}
+				}
+			},
+			{
+				column: "centroidClonotypeKey",
+				spec: {
+					valueType: "String",
+					name: "pl7.app/structure/clustering/centroidClonotypeKey",
+					annotations: {
+						"pl7.app/label": "Centroid clonotype key",
+						"pl7.app/table/visibility": "optional"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet"
+	}, { splitDataAndSpec: true })
+
+	// Linker PColumn — 2-axis [clusterId, clonotypeKey] table with an Int
+	// placeholder value, flagged `pl7.app/isLinkerColumn: "true"`. This is what
+	// connects the [clonotypeKey] and [clusterId] axes in the project's spec
+	// graph. Without it, table joins between the two axes fail with the
+	// "2 connected components, got 1" error from pframes-rs.
+	clusterLinkPf := xsv.importFile(clusterAssignmentsTsv, "tsv", {
+		axes: [
+			{ column: "clusterId", spec: clusterIdAxisSpec },
+			{ column: "clonotypeKey", spec: clonotypeAxisSpec }
+		],
+		columns: [
+			{
+				column: "isCentroid",
+				spec: {
+					valueType: "Int",
+					name: "pl7.app/structure/clustering/clusterLink",
+					annotations: {
+						"pl7.app/label": "Cluster link",
+						"pl7.app/isLinkerColumn": "true",
+						"pl7.app/table/visibility": "hidden"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 0
+	}, { splitDataAndSpec: true })
+
+	// Trace-inject all output specs. Prefix builder keys per-source so the
+	// `clusterLabel` column (present in both the per-clonotype assignment table
+	// and the per-cluster summary table, with different specs) doesn't collide.
+	// The prefixes are internal — the UI keys off the spec name, not these.
+	clustersPfBuilder := pframes.pFrameBuilder()
+	for k, v in clusterAssignmentsPf {
+		clustersPfBuilder.add("assign." + k, trace.inject(v.spec), v.data)
+	}
+	for k, v in clusterSummaryPf {
+		clustersPfBuilder.add("summary." + k, trace.inject(v.spec), v.data)
+	}
+	for k, v in clusterLinkPf {
+		clustersPfBuilder.add("link." + k, trace.inject(v.spec), v.data)
+	}
+	clustersPf := clustersPfBuilder.build()
+
+	// Centroid PDB ResourceMap — File-typed PColumn on [clusterId].
+	centroidPdbsSpec := {
+		kind: "PColumn",
+		name: "pl7.app/structure/centroidPdb",
+		domain: { "pl7.app/structure/numbering": "imgt" },
+		valueType: "File",
+		axesSpec: [clusterIdAxisSpec],
+		annotations: {
+			"pl7.app/label": "Centroid 3D Structure",
+			"pl7.app/structure/numbering": "imgt",
+			"pl7.app/structure/pdb": "true"
+		}
+	}
+	centroidPdbsPfBuilder := pframes.pFrameBuilder()
+	centroidPdbsPfBuilder.add(
+		"centroidPdb",
+		trace.inject(centroidPdbsSpec),
+		unwrap("centroidPdbsMap")
+	)
+	centroidPdbsPf := centroidPdbsPfBuilder.build()
+
+	return {
+		outputs: {
+			clustersTable: pframes.exportFrame(clustersPf),
+			centroidPdbsMap: pframes.exportFrame(centroidPdbsPf),
+			clusteringSummary: unwrap("summary"),
+			clusteringLog: unwrap("log")
+		},
+		exports: {
+			clusters: clustersPf,
+			centroidPdbs: centroidPdbsPf
+		}
+	}
+})
