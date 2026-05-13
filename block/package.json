@@ -12,7 +12,6 @@
     "index.js"
   ],
   "dependencies": {
-    "@platforma-sdk/model": "catalog:",
     "@platforma-open/milaboratories.3d-structure-clustering.workflow": "workspace:*",
     "@platforma-open/milaboratories.3d-structure-clustering.model": "workspace:*",
     "@platforma-open/milaboratories.3d-structure-clustering.ui": "workspace:*"

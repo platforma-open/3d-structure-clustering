@@ -96,9 +96,6 @@ importers:
       '@platforma-open/milaboratories.3d-structure-clustering.workflow':
         specifier: workspace:*
         version: link:../workflow
-      '@platforma-sdk/model':
-        specifier: 'catalog:'
-        version: 1.76.4
     devDependencies:
       '@platforma-sdk/block-tools':
         specifier: 'catalog:'
