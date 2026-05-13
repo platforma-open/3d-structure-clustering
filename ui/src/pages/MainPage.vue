@@ -7,13 +7,13 @@ import {
   PlBtnGhost,
   PlDatasetSelector,
   PlLogView,
-  PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref } from "vue";
 import { useApp } from "../app";
+import { defaultBlockLabelFor } from "@platforma-open/milaboratories.3d-structure-clustering.model";
 
 const app = useApp();
 
@@ -44,22 +44,12 @@ function setCoverageThreshold(value: number | undefined) {
 <template>
   <PlBlockPage
     v-model:subtitle="app.model.data.customBlockLabel"
-    :subtitle-placeholder="app.model.data.defaultBlockLabel"
+    :subtitle-placeholder="defaultBlockLabelFor(app.model.data)"
     title="3D Structure Clustering"
   >
     <template #append>
-      <PlBtnGhost @click.stop="() => (logOpen = true)">
-        Logs
-        <template #append>
-          <PlMaskIcon24 name="file-logs" />
-        </template>
-      </PlBtnGhost>
-      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
-        Settings
-        <template #append>
-          <PlMaskIcon24 name="settings" />
-        </template>
-      </PlBtnGhost>
+      <PlBtnGhost @click.stop="logOpen = true" icon="file-logs"> Logs </PlBtnGhost>
+      <PlBtnGhost @click.stop="settingsOpen = true" icon="settings"> Settings </PlBtnGhost>
     </template>
 
     <PlAlert v-if="emptyInput" type="warn">

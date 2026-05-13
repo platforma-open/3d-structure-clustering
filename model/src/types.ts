@@ -4,7 +4,6 @@ import type { DatasetSelection, PlDataTableStateV2, PrimaryRef } from "@platform
 export type ClusteringMode = "easy-cluster" | "easy-linclust";
 
 export type BlockArgs = {
-  defaultBlockLabel: string;
   customBlockLabel: string;
 
   dataset: PrimaryRef;
@@ -17,7 +16,6 @@ export type BlockArgs = {
 };
 
 export type BlockData = {
-  defaultBlockLabel: string;
   customBlockLabel: string;
 
   dataset?: DatasetSelection;

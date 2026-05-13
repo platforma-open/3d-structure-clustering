@@ -23,7 +23,6 @@ const initialBubbleState = () =>
   }) satisfies import("@milaboratories/graph-maker").GraphMakerState;
 
 export const blockDataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
-  defaultBlockLabel: "",
   customBlockLabel: "",
 
   tmScoreThreshold: 0.9,

@@ -40,7 +40,6 @@ export const platforma = BlockModelV3.create(blockDataModel)
   .args<BlockArgs>((data) => {
     if (data.dataset === undefined) throw new Error("Select a predicted PDB column");
     return {
-      defaultBlockLabel: data.defaultBlockLabel,
       customBlockLabel: data.customBlockLabel,
       dataset: data.dataset.primary,
       tmScoreThreshold: data.tmScoreThreshold,
@@ -179,7 +178,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
 
   .title(() => "3D Structure Clustering")
 
-  .subtitle((ctx) => ctx.data.customBlockLabel || ctx.data.defaultBlockLabel)
+  .subtitle((ctx) => ctx.data.customBlockLabel || defaultBlockLabelFor(ctx.data))
 
   .sections((_ctx) => [
     { type: "link", href: "/", label: "Main" },
