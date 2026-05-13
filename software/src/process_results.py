@@ -122,20 +122,28 @@ def main():
         cluster_df["clonotypeKey"] == cluster_df["centroidClonotypeKey"]
     ).astype("Int64")
 
-    pdb_cache: dict[str, tuple] = {}
-
-    def load_cached(filename: str, bin_label: str):
-        if filename in pdb_cache:
-            return pdb_cache[filename]
-        candidates = [
+    def resolve_pdb_path(filename: str, bin_label: str) -> str:
+        for p in (
             os.path.join(args.pdbs_dir, filename),
             os.path.join(args.pdbs_dir, bin_label, filename),
-        ]
-        path = next((p for p in candidates if os.path.exists(p)), None)
-        if path is None:
-            raise SystemExit(f"PDB file not found for {filename} (bin {bin_label})")
-        pdb_cache[filename] = load_pdb_coords(path)
-        return pdb_cache[filename]
+        ):
+            if os.path.exists(p):
+                return p
+        raise SystemExit(f"PDB file not found for {filename} (bin {bin_label})")
+
+    # Cache only centroids: each centroid is reused across every member of its
+    # cluster, so re-parsing it N times is wasteful. Members are each used
+    # exactly once — caching them would balloon memory on large datasets
+    # without speeding anything up.
+    centroid_cache: dict[str, tuple] = {}
+
+    def load_centroid(filename: str, bin_label: str):
+        cached = centroid_cache.get(filename)
+        if cached is not None:
+            return cached
+        coords = load_pdb_coords(resolve_pdb_path(filename, bin_label))
+        centroid_cache[filename] = coords
+        return coords
 
     # TM-score normalised by chain1 (member) length — the conventional reading.
     tm_scores: list[float] = []
@@ -143,8 +151,8 @@ def main():
         if row["isCentroid"] == 1:
             tm_scores.append(1.0)
             continue
-        m_coords, m_seq = load_cached(row["member_filename"], row["bin"])
-        c_coords, c_seq = load_cached(row["centroid_filename"], row["bin"])
+        m_coords, m_seq = load_pdb_coords(resolve_pdb_path(row["member_filename"], row["bin"]))
+        c_coords, c_seq = load_centroid(row["centroid_filename"], row["bin"])
         result = tm_align(m_coords, c_coords, m_seq, c_seq)
         tm_scores.append(max(0.0, min(1.0, float(result.tm_norm_chain1))))
 
