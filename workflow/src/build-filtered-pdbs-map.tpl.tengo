@@ -1,5 +1,5 @@
-// Workdir processor: builds a [clusterId] → File ResourceMap from
-// `results/centroids_manifest.tsv` + `results/centroids/`.
+// Workdir processor: builds a [clonotypeKey] → File ResourceMap from
+// `filter_pdbs.py`'s `filtered/filtered_manifest.tsv` + `filtered/`.
 
 self := import("@platforma-sdk/workflow-tengo:workdir.proc")
 
@@ -8,7 +8,7 @@ path := import("@platforma-sdk/workflow-tengo:path")
 pcolumn := import("@platforma-sdk/workflow-tengo:pframes.pcolumn")
 
 self.readFiles(func(inputs) {
-	return { manifest: "results/centroids_manifest.tsv" }
+	return { manifest: "filtered/filtered_manifest.tsv" }
 })
 
 self.body(func(inputs) {
@@ -23,11 +23,11 @@ self.body(func(inputs) {
 			if line == "" { continue }
 			fields := text.split(line, "\t")
 			if len(fields) < 2 { continue }
-			clusterId := text.trim_space(fields[0])
-			pdbFilename := text.trim_space(fields[1])
-			if pdbFilename == "" { continue }
-			pdbFile := self.saveFile(path.join("results", "centroids", pdbFilename))
-			data.add([clusterId], pdbFile)
+			clonotypeKey := text.trim_space(fields[0])
+			filename := text.trim_space(fields[1])
+			if clonotypeKey == "" || filename == "" { continue }
+			pdbFile := self.saveFile(path.join("filtered", filename))
+			data.add([clonotypeKey], pdbFile)
 		}
 	}
 

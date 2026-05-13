@@ -5,8 +5,7 @@ import {
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
-  PlCheckbox,
-  PlDropdownRef,
+  PlDatasetSelector,
   PlLogView,
   PlMaskIcon24,
   PlNumberField,
@@ -40,8 +39,6 @@ function setCoverageThreshold(value: number | undefined) {
   if (value === undefined) return;
   app.model.data.coverageThreshold = Math.min(1.0, Math.max(0.5, value));
 }
-
-const stratifyDisabled = computed(() => app.model.outputs.hasCdrh3LengthColumn !== true);
 </script>
 
 <template>
@@ -85,7 +82,7 @@ const stratifyDisabled = computed(() => app.model.outputs.hasCdrh3LengthColumn !
     <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
       <template #title>Settings</template>
 
-      <PlDropdownRef
+      <PlDatasetSelector
         v-model="app.model.data.dataset"
         :options="app.model.outputs.datasetOptions"
         label="3D Structure"
@@ -102,8 +99,8 @@ const stratifyDisabled = computed(() => app.model.outputs.hasCdrh3LengthColumn !
         @update:model-value="setTmScoreThreshold"
       >
         <template #tooltip>
-          FoldSeek-recommended cutoff for shared fold is 0.8; lower values pull in more distant
-          relatives.
+          Minimum TM-score for two structures to land in the same cluster. Default 0.9 favours
+          tight, fold-identical clusters; lower it to pull in more distant structural relatives.
         </template>
       </PlNumberField>
 
@@ -119,21 +116,6 @@ const stratifyDisabled = computed(() => app.model.outputs.hasCdrh3LengthColumn !
           Minimum alignment coverage for two structures to land in the same cluster.
         </template>
       </PlNumberField>
-
-      <!--      <PlCheckbox-->
-      <!--        v-model="app.model.data.cdrh3LengthStratify"-->
-      <!--        :disabled="stratifyDisabled"-->
-      <!--        label="Stratify by CDRH3 length"-->
-      <!--      >-->
-      <!--        <template #tooltip>-->
-      <!--          When the upstream dataset exposes a CDRH3 length column, FoldSeek runs once per length-->
-      <!--          bin; cluster IDs are namespaced by bin so two clusters with different CDRH3 lengths never-->
-      <!--          share an ID.-->
-      <!--          <span v-if="stratifyDisabled">-->
-      <!--            <br />Disabled because the selected dataset has no CDRH3 length column.-->
-      <!--          </span>-->
-      <!--        </template>-->
-      <!--      </PlCheckbox>-->
 
       <PlAccordionSection label="Advanced">
         <PlNumberField

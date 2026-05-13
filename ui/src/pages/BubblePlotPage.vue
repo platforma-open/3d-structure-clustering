@@ -7,19 +7,21 @@ import { useApp } from "../app";
 
 const app = useApp();
 
-// One point per cluster: x = cluster size, y = cluster radius (TM-distance),
-// dot size = cluster size. The bubble template needs two axes — we only have
-// [clusterId], so a scatterplot of (size, radius) is the natural fit and
-// gives a quick visual of "tight, populous clusters" (top-left) vs "loose,
-// rare clusters" (bottom-right).
-const defaultOptions = computed((): PredefinedGraphOption<"scatterplot">[] | undefined => {
+// One bubble per [sampleId, clusterId]; size = per-sample abundance, color =
+// per-cluster size. `clusterSize >= 3` filter hides singletons.
+const defaultOptions = computed((): PredefinedGraphOption<"bubble">[] | undefined => {
+  const abundanceSpec = app.model.outputs.perSampleClusterAbundanceSpec;
   const sizeSpec = app.model.outputs.clusterSizeSpec;
-  const radiusSpec = app.model.outputs.clusterRadiusSpec;
-  if (!sizeSpec || !radiusSpec) return undefined;
+  if (!abundanceSpec || !sizeSpec) return undefined;
+  const sampleAxis = abundanceSpec.axesSpec.find((a) => a.name === "pl7.app/sampleId");
+  const clusterAxis = abundanceSpec.axesSpec.find((a) => a.name === "pl7.app/clusterId");
+  if (!sampleAxis || !clusterAxis) return undefined;
   return [
-    { inputName: "x", selectedSource: sizeSpec },
-    { inputName: "y", selectedSource: radiusSpec },
-    { inputName: "size", selectedSource: sizeSpec },
+    { inputName: "x", selectedSource: clusterAxis },
+    { inputName: "y", selectedSource: sampleAxis },
+    { inputName: "valueColor", selectedSource: sizeSpec },
+    { inputName: "valueSize", selectedSource: abundanceSpec },
+    { inputName: "filters", selectedSource: sizeSpec, selectedFilterRange: { min: 3 } },
   ];
 });
 </script>
@@ -28,11 +30,11 @@ const defaultOptions = computed((): PredefinedGraphOption<"scatterplot">[] | und
   <PlBlockPage>
     <GraphMaker
       v-model="app.model.data.graphStateBubble"
-      chart-type="scatterplot"
+      chart-type="bubble"
       :data-state-key="app.model.outputs.bubblePlotPf"
       :p-frame="app.model.outputs.bubblePlotPf"
       :default-options="defaultOptions"
-      :status-text="{ noPframe: { title: 'Run the workflow to see cluster overview' } }"
+      :status-text="{ noPframe: { title: 'Run the workflow to see cluster abundance' } }"
     />
   </PlBlockPage>
 </template>

@@ -1,0 +1,300 @@
+// PColumn / axis specs for the 3D Structure Clustering workflow.
+
+ll := import("@platforma-sdk/workflow-tengo:ll")
+maps := import("@platforma-sdk/workflow-tengo:maps")
+text := import("text")
+
+// `pl7.app/clusterId` is the shared axis name antibody-tcr-lead-selection
+// recognises for the diversification column; algorithm + blockId in the
+// domain keep this distinct from clonotype-clustering's mmseqs2 cluster axis.
+getClusterIdAxisSpec := func(blockId) {
+	return {
+		name: "pl7.app/clusterId",
+		type: "String",
+		domain: {
+			"pl7.app/clustering/algorithm": "foldseek",
+			"pl7.app/clustering/blockId": blockId
+		},
+		annotations: {
+			"pl7.app/label": "Cluster Id",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "990000"
+		}
+	}
+}
+
+// xsv.importFile settings for cluster_assignments.tsv — per-clonotype columns
+// on the upstream clonotype axis. `clusterLabel` is a plain String column
+// (NOT the linker — see getClusterLinkSettings).
+getClusterAssignmentsSettings := func(clonotypeAxisSpec, clusterIdAxisSpec) {
+	return {
+		axes: [{ column: "clonotypeKey", spec: clonotypeAxisSpec }],
+		columns: [
+			{
+				column: "clusterLabel",
+				spec: {
+					valueType: "String",
+					name: "pl7.app/clusterId",
+					domain: clusterIdAxisSpec.domain,
+					annotations: {
+						"pl7.app/label": "Cluster Id",
+						"pl7.app/structure/clusteringSource": "foldseek"
+					}
+				}
+			},
+			{
+				column: "isCentroid",
+				spec: {
+					valueType: "Int",
+					name: "pl7.app/structure/clustering/isCentroid",
+					annotations: {
+						"pl7.app/label": "Is centroid",
+						"pl7.app/table/visibility": "hidden"
+					}
+				}
+			},
+			{
+				column: "tmDistanceToCentroid",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/tmDistanceToCentroid",
+					annotations: {
+						"pl7.app/label": "TM-distance to centroid",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/rankingOrder": "decreasing"
+					}
+				}
+			},
+			{
+				column: "tmScoreToCentroid",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/tmScoreToCentroid",
+					annotations: {
+						"pl7.app/label": "TM-score to centroid",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/table/visibility": "optional"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet"
+	}
+}
+
+// xsv.importFile settings for cluster_summary.tsv — per-cluster columns.
+getClusterSummarySettings := func(clusterIdAxisSpec) {
+	return {
+		axes: [{ column: "clusterId", spec: clusterIdAxisSpec }],
+		columns: [
+			{
+				column: "clusterLabel",
+				spec: {
+					valueType: "String",
+					name: "pl7.app/label",
+					annotations: {
+						"pl7.app/label": "Cluster Id",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "990000"
+					}
+				}
+			},
+			{
+				column: "size",
+				spec: {
+					valueType: "Long",
+					name: "pl7.app/structure/clustering/clusterSize",
+					annotations: {
+						"pl7.app/label": "Cluster size",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "9000",
+						"pl7.app/isAbundance": "true"
+					}
+				}
+			},
+			{
+				column: "radius",
+				spec: {
+					valueType: "Double",
+					name: "pl7.app/structure/clustering/clusterRadius",
+					annotations: {
+						"pl7.app/label": "Cluster radius (TM-dist)",
+						"pl7.app/min": "0",
+						"pl7.app/max": "1",
+						"pl7.app/format": ".3f",
+						"pl7.app/rankingOrder": "decreasing",
+						"pl7.app/table/visibility": "default",
+						"pl7.app/table/orderPriority": "8000"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet"
+	}
+}
+
+// 2-axis [clusterId, clonotypeKey] linker — required by pframes-rs to
+// connect the two axes in the project spec graph.
+getClusterLinkSettings := func(clonotypeAxisSpec, clusterIdAxisSpec) {
+	return {
+		axes: [
+			{ column: "clusterId", spec: clusterIdAxisSpec },
+			{ column: "clonotypeKey", spec: clonotypeAxisSpec }
+		],
+		columns: [
+			{
+				column: "isCentroid",
+				spec: {
+					valueType: "Int",
+					name: "pl7.app/structure/clustering/clusterLink",
+					annotations: {
+						"pl7.app/label": "Cluster link",
+						"pl7.app/isLinkerColumn": "true",
+						"pl7.app/table/visibility": "hidden"
+					}
+				}
+			}
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 0
+	}
+}
+
+// xsv.importFile settings for abundances.tsv — per-[sampleId, clusterId]
+// count + fraction; feeds the bubble plot. Count keeps the upstream spec
+// name (e.g. `pl7.app/numberOfReads`); fraction renames to
+// `pl7.app/{read,uniqueMolecule}Fraction`.
+getPerSampleClusterAbundanceSettings := func(sampleIdAxisSpec, clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit) {
+	fractionName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeFraction" : "pl7.app/readFraction"
+
+	ac := {
+		name: abundanceSpec.name,
+		valueType: abundanceSpec.valueType,
+		domain: abundanceSpec.domain,
+		annotations: abundanceSpec.annotations
+	}
+
+	countSpec := maps.deepMerge(ac, {
+		annotations: {
+			"pl7.app/label": abundanceLabel + " in Cluster",
+			"pl7.app/table/visibility": "optional"
+		}
+	})
+
+	fractionSpec := maps.deepMerge(ac, {
+		name: fractionName,
+		valueType: "Float",
+		annotations: {
+			"pl7.app/label": text.re_replace("Number", abundanceLabel, "Fraction") + " in Cluster",
+			"pl7.app/abundance/normalized": "true",
+			"pl7.app/abundance/unit": abundanceUnit,
+			"pl7.app/table/visibility": "optional"
+		}
+	})
+
+	return {
+		axes: [
+			{ column: "sampleId", spec: sampleIdAxisSpec },
+			{ column: "clusterId", spec: clusterIdAxisSpec }
+		],
+		columns: [
+			{ column: "abundance", spec: countSpec },
+			{ column: "abundance_fraction", spec: fractionSpec }
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 1
+	}
+}
+
+// xsv.importFile settings for abundances-per-cluster.tsv — per-[clusterId]
+// totals (count + fraction), the headline abundance columns in the main
+// table. `pl7.app/isAnchor` (carried by the upstream abundance) is stripped
+// from the aggregates.
+getClusterTotalAbundanceSettings := func(clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit) {
+	totalCountName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeCountTotal" : "pl7.app/readCountTotal"
+	totalFractionName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeFractionTotal" : "pl7.app/readFractionTotal"
+
+	ac := {
+		name: abundanceSpec.name,
+		valueType: abundanceSpec.valueType,
+		domain: abundanceSpec.domain,
+		annotations: abundanceSpec.annotations
+	}
+
+	// "Number of reads" → "Reads"; preserve UMIs after title-casing.
+	fractionLabel := text.title(text.re_replace("number of ", text.to_lower(abundanceLabel), ""))
+	fractionLabel = text.re_replace("Umis", fractionLabel, "UMIs")
+
+	stripIsAnchor := func(annotations) {
+		return maps.filter(annotations, func(k, v) { return k != "pl7.app/isAnchor" })
+	}
+
+	countSpec := maps.deepMerge(ac, {
+		name: totalCountName,
+		annotations: {
+			"pl7.app/label": "Total " + abundanceLabel + " in Cluster",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "8500"
+		}
+	})
+	countSpec.annotations = stripIsAnchor(countSpec.annotations)
+
+	fractionSpec := maps.deepMerge(ac, {
+		name: totalFractionName,
+		valueType: "Float",
+		annotations: {
+			"pl7.app/label": "Total " + fractionLabel + " Fraction in Cluster",
+			"pl7.app/abundance/isPrimary": "true",
+			"pl7.app/abundance/normalized": "true",
+			"pl7.app/abundance/unit": abundanceUnit,
+			"pl7.app/format": ".2p",
+			"pl7.app/isAbundance": "true",
+			"pl7.app/max": "1",
+			"pl7.app/min": "0",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1"
+		}
+	})
+	fractionSpec.annotations = stripIsAnchor(fractionSpec.annotations)
+
+	return {
+		axes: [{ column: "clusterId", spec: clusterIdAxisSpec }],
+		columns: [
+			{ column: "abundance_per_cluster", spec: countSpec },
+			{ column: "abundance_fraction_per_cluster", spec: fractionSpec }
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 0
+	}
+}
+
+// Centroid PDB ResourceMap PColumn spec — applied when adding the workdir-
+// processor map to the output pFrameBuilder.
+getCentroidPdbsPColumnSpec := func(clusterIdAxisSpec) {
+	return {
+		kind: "PColumn",
+		name: "pl7.app/structure/centroidPdb",
+		domain: { "pl7.app/structure/numbering": "imgt" },
+		valueType: "File",
+		axesSpec: [clusterIdAxisSpec],
+		annotations: {
+			"pl7.app/label": "Centroid 3D Structure",
+			"pl7.app/structure/numbering": "imgt",
+			"pl7.app/structure/pdb": "true"
+		}
+	}
+}
+
+export ll.toStrict({
+	getClusterIdAxisSpec: getClusterIdAxisSpec,
+	getClusterAssignmentsSettings: getClusterAssignmentsSettings,
+	getClusterSummarySettings: getClusterSummarySettings,
+	getClusterLinkSettings: getClusterLinkSettings,
+	getPerSampleClusterAbundanceSettings: getPerSampleClusterAbundanceSettings,
+	getClusterTotalAbundanceSettings: getClusterTotalAbundanceSettings,
+	getCentroidPdbsPColumnSpec: getCentroidPdbsPColumnSpec
+})

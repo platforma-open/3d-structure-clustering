@@ -29,7 +29,6 @@ export const blockDataModel = new DataModelBuilder().from<BlockData>("v1").init(
   tmScoreThreshold: 0.9,
   coverageThreshold: 0.9,
   clusteringMode: "easy-cluster" as const,
-  cdrh3LengthStratify: false,
 
   tableState: createPlDataTableStateV2(),
   graphStateBubble: initialBubbleState(),

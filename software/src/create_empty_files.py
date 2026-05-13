@@ -1,9 +1,5 @@
-"""Emit empty-but-headed TSVs for the empty-input short-circuit.
-
-When the confident PDB set is empty (no rows), the workflow skips the FoldSeek
-pipeline and calls this entrypoint to materialize placeholder TSVs with the
-expected headers, so downstream xsv.importFile calls don't fail on missing
-files. Mirrors the pattern in clonotype-clustering's create-empty-files.py.
+"""Empty-input short-circuit: writes header-only TSVs so downstream
+xsv.importFile calls don't fail when the (filtered) PDB set is empty.
 """
 
 import argparse
@@ -23,6 +19,12 @@ CLUSTER_ASSIGNMENTS_COLS = [
 ]
 CLUSTER_SUMMARY_COLS = ["clusterId", "clusterLabel", "size", "radius", "centroidClonotypeKey"]
 CENTROIDS_MANIFEST_COLS = ["clusterId", "pdb_filename"]
+ABUNDANCES_COLS = ["sampleId", "clusterId", "abundance", "abundance_fraction"]
+ABUNDANCES_PER_CLUSTER_COLS = [
+    "clusterId",
+    "abundance_per_cluster",
+    "abundance_fraction_per_cluster",
+]
 
 
 def main():
@@ -41,6 +43,12 @@ def main():
     )
     pd.DataFrame(columns=CENTROIDS_MANIFEST_COLS).to_csv(
         os.path.join(args.output_dir, "centroids_manifest.tsv"), sep="\t", index=False
+    )
+    pd.DataFrame(columns=ABUNDANCES_COLS).to_csv(
+        os.path.join(args.output_dir, "abundances.tsv"), sep="\t", index=False
+    )
+    pd.DataFrame(columns=ABUNDANCES_PER_CLUSTER_COLS).to_csv(
+        os.path.join(args.output_dir, "abundances-per-cluster.tsv"), sep="\t", index=False
     )
 
     summary_json = {

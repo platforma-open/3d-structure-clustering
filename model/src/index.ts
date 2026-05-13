@@ -1,13 +1,14 @@
 import type {
   AxisId,
+  DatasetOption,
   InferOutputsType,
   PFrameHandle,
   PlDataTableModel,
-  PObjectId,
+  PObjectSpec,
 } from "@platforma-sdk/model";
 import {
   BlockModelV3,
-  createDiscoveredPColumnId,
+  buildDatasetOptions,
   createPFrameForGraphs,
   createPlDataTableV3,
   isPColumnSpec,
@@ -20,11 +21,8 @@ import type { BlockArgs, BlockData, ClusteringMode } from "./types";
 export * from "./types";
 export { blockDataModel } from "./dataModel";
 
-// `easy-linclust` is intentionally absent — foldseek's linclust rejects PDB
-// directories ("Input database has the wrong type (Generic)") and only accepts
-// FASTA / stdin. Adding it would require chaining `foldseek createdb` →
-// `foldseek linclust`, which means shuffling ~14 db files between two exec
-// runs without an `addFileSet` API. Re-enable when the use case warrants it.
+// `easy-linclust` is not exposed: foldseek's linclust rejects PDB directories
+// and requires a separate `foldseek createdb` chain.
 export const clusteringModeOptions = [
   { label: "Cascaded", value: "easy-cluster" satisfies ClusteringMode },
 ] as const;
@@ -34,7 +32,6 @@ export function defaultBlockLabelFor(args: Partial<BlockData>): string {
   parts.push(`TM≥${(args.tmScoreThreshold ?? 0.5).toFixed(2)}`);
   parts.push(`cov≥${(args.coverageThreshold ?? 0.8).toFixed(2)}`);
   if (args.clusteringMode === "easy-linclust") parts.push("linclust");
-  if (args.cdrh3LengthStratify) parts.push("stratified");
   return parts.join(", ");
 }
 
@@ -45,67 +42,66 @@ export const platforma = BlockModelV3.create(blockDataModel)
     return {
       defaultBlockLabel: data.defaultBlockLabel,
       customBlockLabel: data.customBlockLabel,
-      dataset: data.dataset,
+      dataset: data.dataset.primary,
       tmScoreThreshold: data.tmScoreThreshold,
       coverageThreshold: data.coverageThreshold,
       clusteringMode: data.clusteringMode,
-      cdrh3LengthStratify: data.cdrh3LengthStratify,
       cpu: data.cpu,
       mem: data.mem,
     };
   })
 
-  // PDB column options. The dropdown label combines the dataset's native
-  // label with the clonotype axis's chain domain so options read e.g.
-  // "My Dataset (IGHeavy)" / "My Dataset (IGLight)" — the column-level label
-  // alone collides across upstream chain-split datasets because MiXCR puts
-  // chain info on the axis, not the column.
-  .output("datasetOptions", (ctx) =>
-    ctx.resultPool.getOptions(
-      [
-        { axes: [{ name: "pl7.app/vdj/clonotypeKey" }], name: "pl7.app/structure/pdb" },
-        { axes: [{ name: "pl7.app/vdj/scClonotypeKey" }], name: "pl7.app/structure/pdb" },
-      ],
-      (spec) => {
-        const chain = isPColumnSpec(spec)
+  // Labels are decorated with the chain pulled from the clonotypeKey axis
+  // domain so chain-split PDB columns don't collide on the same "3D Structure"
+  // label in the dropdown.
+  .output("datasetOptions", (ctx): DatasetOption[] | undefined => {
+    const options = buildDatasetOptions(ctx, {
+      primary: (spec: PObjectSpec): boolean => {
+        if (!isPColumnSpec(spec)) return false;
+        if (spec.name !== "pl7.app/structure/pdb") return false;
+        const rowAxis = spec.axesSpec?.[0]?.name;
+        return rowAxis === "pl7.app/vdj/clonotypeKey" || rowAxis === "pl7.app/vdj/scClonotypeKey";
+      },
+    });
+    if (options === undefined) return undefined;
+    return options.map((opt) => {
+      const spec = ctx.resultPool.getPColumnSpecByRef(opt.primary.ref);
+      const chain =
+        spec !== undefined && isPColumnSpec(spec)
           ? spec.axesSpec?.[0]?.domain?.["pl7.app/vdj/chain"]
           : undefined;
-        return chain ? `3D Structure (${chain})` : "3D Structure";
-      },
-    ),
-  )
-
-  .output("hasCdrh3LengthColumn", (): boolean => false)
+      const label = chain ? `3D Structure (${chain})` : "3D Structure";
+      return { ...opt, primary: { ...opt.primary, label } };
+    });
+  })
 
   .outputWithStatus("clustersTable", (ctx): PlDataTableModel | undefined => {
     const acc = ctx.outputs?.resolve("clustersTable");
     if (acc === undefined) return undefined;
     const snapshots = new OutputColumnProvider(acc).getAllColumns();
     if (snapshots.length === 0) return undefined;
+
+    // Anchor on a per-cluster PColumn so the table is keyed by [clusterId]
+    // and V3's discovery surfaces the `pl7.app/label` column as the
+    // axis-value substitution. maxHops:0 keeps per-clonotype columns out of
+    // the per-cluster table.
+    const anchorSpec = snapshots.find(
+      (s) => s.spec.name === "pl7.app/structure/clustering/clusterSize",
+    )?.spec;
+    if (anchorSpec === undefined) return undefined;
+
     return createPlDataTableV3(ctx, {
-      columns: snapshots.map((s) => ({
-        column: {
-          ...s,
-          id: createDiscoveredPColumnId({
-            column: s.id as PObjectId,
-            path: [],
-            columnQualifications: [],
-            queriesQualifications: {},
-          }),
-        },
-        originalId: s.id as PObjectId,
-        qualifications: { forQueries: {}, forHit: [] },
-        path: [],
-        isPrimary: true,
-      })),
+      columns: {
+        sources: [new OutputColumnProvider(acc)],
+        anchors: { main: anchorSpec },
+        selector: { mode: "enrichment", maxHops: 0 },
+      },
       tableState: ctx.data.tableState,
     });
   })
 
-  // Single-column pFrames for the histogram + bubble plot pages. Splitting
-  // into per-page frames mirrors the pattern in 3d-structure-prediction —
-  // GraphMaker pre-fills extra slots from siblings if given a multi-column
-  // source, producing overlapping plots.
+  // Single-column histogram pframe — GraphMaker pre-fills extra slots from
+  // siblings when given a multi-column source, producing overlapping plots.
   .outputWithStatus("histogramPf", (ctx): PFrameHandle | undefined => {
     const pCols = ctx.outputs?.resolve("clustersTable")?.getPColumns();
     if (pCols === undefined) return undefined;
@@ -120,9 +116,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
     return createPFrameForGraphs(ctx, pCols);
   })
 
-  // Specs surfaced to the plot pages so they can build PredefinedGraphOption
-  // defaults without re-resolving the result. The pages key off the spec
-  // `name` to find the right source.
+  // Specs surfaced to the plot pages for PredefinedGraphOption defaults.
   .output("clusterSizeSpec", (ctx) => {
     const pCols = ctx.outputs?.resolve("clustersTable")?.getPColumns();
     return pCols?.find((c) => c.spec.name === "pl7.app/structure/clustering/clusterSize")?.spec;
@@ -133,8 +127,22 @@ export const platforma = BlockModelV3.create(blockDataModel)
     return pCols?.find((c) => c.spec.name === "pl7.app/structure/clustering/clusterRadius")?.spec;
   })
 
-  // Centroid PDB ResourceMap: clusterId → File handle. Built by the
-  // build-centroid-pdbs-map workdir processor template.
+  // Per-[sampleId, clusterId] abundance count for the bubble plot. Matched
+  // by axes + abundance annotations (the count column inherits the upstream
+  // name, which varies by modality).
+  .output("perSampleClusterAbundanceSpec", (ctx) => {
+    const pCols = ctx.outputs?.resolve("clustersTable")?.getPColumns();
+    return pCols?.find(
+      (c) =>
+        c.spec.axesSpec.length === 2 &&
+        c.spec.axesSpec.some((a) => a.name === "pl7.app/sampleId") &&
+        c.spec.axesSpec.some((a) => a.name === "pl7.app/clusterId") &&
+        c.spec.annotations?.["pl7.app/isAbundance"] === "true" &&
+        c.spec.annotations?.["pl7.app/abundance/normalized"] !== "true",
+    )?.spec;
+  })
+
+  // Centroid PDB ResourceMap: clusterId → File handle.
   .output("centroidPdbsMap", (ctx) => {
     const pCols = ctx.outputs?.resolve("centroidPdbsMap")?.getPColumns();
     if (pCols === undefined) return undefined;
@@ -145,27 +153,23 @@ export const platforma = BlockModelV3.create(blockDataModel)
     return parsed.data;
   })
 
-  // ClusterId axis identifier — used by the UI to wire `show-cell-button-for-axis-id`
-  // for per-row centroid-PDB download / view.
+  // ClusterId axis identifier — used by the UI to wire per-row centroid-PDB
+  // download / view via `show-cell-button-for-axis-id`.
   .output("clusterAxisId", (ctx): AxisId | undefined => {
     const pCols = ctx.outputs?.resolve("clustersTable")?.getPColumns();
     if (pCols === undefined || pCols.length === 0) return undefined;
-    // Find any column on the [sampleId, clusterId] axes.
     for (const col of pCols) {
-      const axis = col.spec.axesSpec.find((a) => a.name === "pl7.app/structure/clusterId");
+      const axis = col.spec.axesSpec.find((a) => a.name === "pl7.app/clusterId");
       if (axis !== undefined) return { type: axis.type, name: axis.name, domain: axis.domain };
     }
     return undefined;
   })
 
-  // Singleton-rate signal — the >25% alert (R51) compares this to a threshold.
   .output("singletonRate", (ctx): number | undefined => {
     const raw = ctx.outputs?.resolve("clusteringSummary")?.getDataAsJson();
     return (raw as { singletonRate?: number } | undefined)?.singletonRate;
   })
 
-  // True when the resolved confident PDB set is empty — drives the empty-input
-  // alert (R18, R43).
   .output("emptyInput", (ctx): boolean | undefined => {
     const raw = ctx.outputs?.resolve("clusteringSummary")?.getDataAsJson();
     return (raw as { emptyInput?: boolean } | undefined)?.emptyInput;
@@ -178,9 +182,9 @@ export const platforma = BlockModelV3.create(blockDataModel)
   .subtitle((ctx) => ctx.data.customBlockLabel || ctx.data.defaultBlockLabel)
 
   .sections((_ctx) => [
-    { type: "link", href: "/", label: "Clusters" },
-    { type: "link", href: "/histogram", label: "Cluster size distribution" },
-    { type: "link", href: "/bubble-plot", label: "Cluster abundance" },
+    { type: "link", href: "/", label: "Main" },
+    { type: "link", href: "/bubble", label: "Most Abundant Clusters" },
+    { type: "link", href: "/histogram", label: "Cluster Size Histogram" },
   ])
 
   .done();

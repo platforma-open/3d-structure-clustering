@@ -1,35 +1,11 @@
-// FoldSeek clustering body — invoked once per processColumn group.
-//
-// The parent template (`main.tpl.tengo`) calls processColumn on the upstream
-// PDB ResourceMap with `aggregate: [<clonotypeKey axis>]` so this body gets
-// every confident PDB in a single invocation.
-//
-// Steps:
-//   1. Build a manifest.tsv from the input map (clonotypeKey -> filename).
-//   2. Run foldseek easy-cluster (or easy-linclust) on the staged PDBs.
-//   3. Parse FoldSeek outputs into final TSVs + copy centroid PDBs (process-results).
-//      TM-distance to centroid is computed in Python via tmtools (TM-align
-//      Python bindings) per (member, centroid) pair — no second foldseek call.
-//      Mirrors the clonotype-clustering pattern of computing distance metric
-//      in post-processing rather than re-running the clustering tool.
-//   4. Surface: cluster_assignments.tsv, cluster_summary.tsv,
-//      centroids_manifest.tsv, centroidPdbsMap (workdir-built ResourceMap),
-//      summary.json, log.
-//
-// Stage 1 deferral: the upstream confident-subset filter (args.dataset.filter)
-// is NOT applied here — every PDB in the upstream ResourceMap is clustered.
-// Re-applying the filter requires either a Python-orchestrated foldseek call
-// or a workdir-sharing API the SDK does not currently expose.
-//
-// The body receives the aggregated ResourceMap via `inputs[VALUE_FIELD_NAME]`.
-// `inputData.inputs()` returns a map of JSON-encoded keys → file references.
+// FoldSeek clustering body — stages the PDB ResourceMap, runs FoldSeek, and
+// runs process_results.py to compute per-pair TM-distances + emit final TSVs.
 
 self := import("@platforma-sdk/workflow-tengo:tpl")
 ll := import("@platforma-sdk/workflow-tengo:ll")
 exec := import("@platforma-sdk/workflow-tengo:exec")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 maps := import("@platforma-sdk/workflow-tengo:maps")
-pConstants := import("@platforma-sdk/workflow-tengo:pframes.constants")
 
 json := import("json")
 text := import("text")
@@ -40,17 +16,33 @@ foldseekSw := assets.importSoftware("@platforma-open/steineggerlab.software-fold
 
 buildCentroidPdbsMapTpl := assets.importTemplate(":build-centroid-pdbs-map")
 
+self.validateInputs({
+	"__options__,closed": "",
+	pdbData: "any",
+	abundanceTsv: "any",
+	abundanceUnit: "string",
+	abundanceLabel: "string",
+	"tmScoreThreshold,?": "number",
+	"coverageThreshold,?": "number",
+	"clusteringMode,?": "string",
+	"cpu,?": "number",
+	"mem,?": "number",
+	"clonotypeLabelsTsv,?": "any"
+})
+
 self.defineOutputs(
 	"clusterAssignments",
 	"clusterSummary",
 	"centroidsManifest",
 	"centroidPdbsMap",
+	"abundances",
+	"abundancesPerCluster",
 	"summary",
 	"log"
 )
 
 self.body(func(inputs) {
-	inputData := inputs[pConstants.VALUE_FIELD_NAME]
+	inputData := inputs.pdbData
 
 	tmScore := is_undefined(inputs.tmScoreThreshold) ? 0.5 : inputs.tmScoreThreshold
 	coverage := is_undefined(inputs.coverageThreshold) ? 0.8 : inputs.coverageThreshold
@@ -58,10 +50,6 @@ self.body(func(inputs) {
 	cpu := is_undefined(inputs.cpu) ? 16 : inputs.cpu
 	memGiB := is_undefined(inputs.mem) ? 32 : inputs.mem
 
-	// Build the per-PDB staging map and the manifest.tsv content from the
-	// aggregated input. Files land under `pdbs/<clonotypeKey>.pdb` in each
-	// downstream exec workdir; clonotypeKeys are hash-based so they're safe
-	// to use directly as filenames.
 	manifestLines := ["clonotypeKey\tstaged_filename\tbin"]
 	stagedFiles := {}
 	inputMap := inputData.inputs()
@@ -79,7 +67,6 @@ self.body(func(inputs) {
 
 	totalRows := len(stagedFiles)
 
-	// Empty-input short-circuit: emit placeholder TSVs and skip foldseek.
 	if totalRows == 0 {
 		emptyRun := exec.builder().
 			software(createEmptyFilesSw).
@@ -87,6 +74,8 @@ self.body(func(inputs) {
 			saveFile("results/cluster_assignments.tsv").
 			saveFile("results/cluster_summary.tsv").
 			saveFile("results/centroids_manifest.tsv").
+			saveFile("results/abundances.tsv").
+			saveFile("results/abundances-per-cluster.tsv").
 			saveFileContent("results/summary.json").
 			processWorkdir("centroidPdbsMap", buildCentroidPdbsMapTpl, {}).
 			saveStdoutStream().
@@ -97,19 +86,16 @@ self.body(func(inputs) {
 			clusterSummary: emptyRun.getFile("results/cluster_summary.tsv"),
 			centroidsManifest: emptyRun.getFile("results/centroids_manifest.tsv"),
 			centroidPdbsMap: emptyRun.getProcessorResult("centroidPdbsMap"),
+			abundances: emptyRun.getFile("results/abundances.tsv"),
+			abundancesPerCluster: emptyRun.getFile("results/abundances-per-cluster.tsv"),
 			summary: emptyRun.getFileContent("results/summary.json"),
 			log: emptyRun.getStdoutStream()
 		}
 	}
 
-	// Step 1: foldseek easy-cluster (or easy-linclust).
-	// `easy-cluster` uses TM-align scoring (--alignment-type 2 + --tmscore-threshold).
-	// `easy-linclust` is kmer-based on the 3Di alphabet — it neither accepts
-	// --alignment-type nor --tmscore-threshold; the threshold maps to
-	// --min-seq-id (3Di sequence identity). Coverage flag is shared.
-	// Per-pair TM-distance for cluster radius/distance metrics is computed
-	// post-hoc by process_results.py via tmtools, so the choice of clustering
-	// algorithm only affects cluster membership, not the reported distances.
+	// `easy-linclust` is kmer-based on the 3Di alphabet — its threshold maps
+	// to `--min-seq-id` (3Di identity), and `--alignment-type` / TM-score don't
+	// apply. `easy-cluster` uses TM-align scoring.
 	fsBuilder := exec.builder().
 		software(foldseekSw).
 		cpu(cpu).mem(string(memGiB) + "GiB").
@@ -140,21 +126,31 @@ self.body(func(inputs) {
 
 	clusterTsv := fsRun.getFile("result_cluster.tsv")
 
-	// Step 2: process-results Python — parse cluster.tsv, compute per-pair
-	// TM-distance via tmtools (TM-align), emit final TSVs + copy centroids.
-	procRun := exec.builder().
+	procBuilder := exec.builder().
 		software(processResultsSw).
 		cpu(cpu).mem("4GiB").
 		addFiles(stagedFiles).
 		addFile("cluster.tsv", clusterTsv).
+		addFile("clone_table.tsv", inputs.abundanceTsv).
 		writeFile("manifest.tsv", manifestContent).
 		arg("--cluster-tsv").arg("cluster.tsv").
 		arg("--manifest").arg("manifest.tsv").
+		arg("--abundance-tsv").arg("clone_table.tsv").
 		arg("--pdbs-dir").arg("pdbs").
-		arg("--output-dir").arg("results").
+		arg("--output-dir").arg("results")
+
+	if !is_undefined(inputs.clonotypeLabelsTsv) {
+		procBuilder.
+			addFile("clonotype_labels.tsv", inputs.clonotypeLabelsTsv).
+			arg("--labels-tsv").arg("clonotype_labels.tsv")
+	}
+
+	procRun := procBuilder.
 		saveFile("results/cluster_assignments.tsv").
 		saveFile("results/cluster_summary.tsv").
 		saveFile("results/centroids_manifest.tsv").
+		saveFile("results/abundances.tsv").
+		saveFile("results/abundances-per-cluster.tsv").
 		saveFileContent("results/summary.json").
 		processWorkdir("centroidPdbsMap", buildCentroidPdbsMapTpl, {}).
 		printErrStreamToStdout().
@@ -166,6 +162,8 @@ self.body(func(inputs) {
 		clusterSummary: procRun.getFile("results/cluster_summary.tsv"),
 		centroidsManifest: procRun.getFile("results/centroids_manifest.tsv"),
 		centroidPdbsMap: procRun.getProcessorResult("centroidPdbsMap"),
+		abundances: procRun.getFile("results/abundances.tsv"),
+		abundancesPerCluster: procRun.getFile("results/abundances-per-cluster.tsv"),
 		summary: procRun.getFileContent("results/summary.json"),
 		log: fsRun.getStdoutStream()
 	}

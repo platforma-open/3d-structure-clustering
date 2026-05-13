@@ -35,6 +35,12 @@
           "artifact": "py-archive",
           "cmd": ["python", "{pkg}/create_empty_files.py"]
         }
+      },
+      "filter-pdbs": {
+        "binary": {
+          "artifact": "py-archive",
+          "cmd": ["python", "{pkg}/filter_pdbs.py"]
+        }
       }
     }
   },
