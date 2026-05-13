@@ -1,0 +1,35 @@
+// Workdir processor: builds a [clonotypeKey] → File ResourceMap from
+// `filter_pdbs.py`'s `filtered/filtered_manifest.tsv` + `filtered/`.
+
+self := import("@platforma-sdk/workflow-tengo:workdir.proc")
+
+text := import("text")
+path := import("@platforma-sdk/workflow-tengo:path")
+pcolumn := import("@platforma-sdk/workflow-tengo:pframes.pcolumn")
+
+self.readFiles(func(inputs) {
+	return { manifest: "filtered/filtered_manifest.tsv" }
+})
+
+self.body(func(inputs) {
+	manifestRaw := string(inputs.manifest.getData())
+
+	data := pcolumn.resourceMapBuilder(/* keyLength */ 1)
+
+	lines := text.split(text.trim_space(manifestRaw), "\n")
+	if len(lines) > 1 {
+		for i := 1; i < len(lines); i++ {
+			line := text.trim_space(lines[i])
+			if line == "" { continue }
+			fields := text.split(line, "\t")
+			if len(fields) < 2 { continue }
+			clonotypeKey := text.trim_space(fields[0])
+			filename := text.trim_space(fields[1])
+			if clonotypeKey == "" || filename == "" { continue }
+			pdbFile := self.saveFile(path.join("filtered", filename))
+			data.add([clonotypeKey], pdbFile)
+		}
+	}
+
+	return data.build()
+})

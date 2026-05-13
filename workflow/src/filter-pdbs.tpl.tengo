@@ -1,0 +1,61 @@
+// filter-pdbs — restricts the PDB ResourceMap to the upstream `confident`
+// subset before clustering. The filter step lives in its own template so the
+// SDK awaits the workdir-processor result before consumers iterate it.
+
+self := import("@platforma-sdk/workflow-tengo:tpl")
+ll := import("@platforma-sdk/workflow-tengo:ll")
+exec := import("@platforma-sdk/workflow-tengo:exec")
+assets := import("@platforma-sdk/workflow-tengo:assets")
+maps := import("@platforma-sdk/workflow-tengo:maps")
+
+json := import("json")
+text := import("text")
+
+filterPdbsSw := assets.importSoftware("@platforma-open/milaboratories.3d-structure-clustering.software:filter-pdbs")
+buildFilteredPdbsMapTpl := assets.importTemplate(":build-filtered-pdbs-map")
+
+self.validateInputs({
+	"__options__,closed": "",
+	pdbData: "any",
+	confidentKeysTsv: "any"
+})
+
+self.defineOutputs("filteredPdbsMap")
+
+self.body(func(inputs) {
+	inputData := inputs.pdbData
+
+	manifestLines := ["clonotypeKey\tstaged_filename\tbin"]
+	stagedFiles := {}
+	inputMap := inputData.inputs()
+	for sKey in maps.getKeys(inputMap) {
+		pdbFile := inputMap[sKey]
+		key := json.decode(sKey)
+		ll.assert(len(key) == 1,
+			"unexpected aggregation key length %d (expected 1, got %v)", len(key), key)
+		clonotypeKey := key[0]
+		filename := string(clonotypeKey) + ".pdb"
+		manifestLines = append(manifestLines, string(clonotypeKey) + "\t" + filename + "\tall")
+		stagedFiles["pdbs/" + filename] = pdbFile
+	}
+	manifestContent := text.join(manifestLines, "\n") + "\n"
+
+	filterRun := exec.builder().
+		software(filterPdbsSw).
+		cpu(2).mem("2GiB").
+		addFiles(stagedFiles).
+		addFile("confident_keys.tsv", inputs.confidentKeysTsv).
+		writeFile("manifest.tsv", manifestContent).
+		arg("--manifest").arg("manifest.tsv").
+		arg("--confident-keys-tsv").arg("confident_keys.tsv").
+		arg("--pdbs-dir").arg("pdbs").
+		arg("--output-dir").arg("filtered").
+		processWorkdir("filteredPdbsMap", buildFilteredPdbsMapTpl, {}).
+		printErrStreamToStdout().
+		saveStdoutStream().
+		run()
+
+	return {
+		filteredPdbsMap: filterRun.getProcessorResult("filteredPdbsMap")
+	}
+})

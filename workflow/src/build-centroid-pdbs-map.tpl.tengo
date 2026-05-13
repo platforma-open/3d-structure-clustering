@@ -1,0 +1,35 @@
+// Workdir processor: builds a [clusterId] → File ResourceMap from
+// `results/centroids_manifest.tsv` + `results/centroids/`.
+
+self := import("@platforma-sdk/workflow-tengo:workdir.proc")
+
+text := import("text")
+path := import("@platforma-sdk/workflow-tengo:path")
+pcolumn := import("@platforma-sdk/workflow-tengo:pframes.pcolumn")
+
+self.readFiles(func(inputs) {
+	return { manifest: "results/centroids_manifest.tsv" }
+})
+
+self.body(func(inputs) {
+	manifestRaw := string(inputs.manifest.getData())
+
+	data := pcolumn.resourceMapBuilder(/* keyLength */ 1)
+
+	lines := text.split(text.trim_space(manifestRaw), "\n")
+	if len(lines) > 1 {
+		for i := 1; i < len(lines); i++ {
+			line := text.trim_space(lines[i])
+			if line == "" { continue }
+			fields := text.split(line, "\t")
+			if len(fields) < 2 { continue }
+			clusterId := text.trim_space(fields[0])
+			pdbFilename := text.trim_space(fields[1])
+			if pdbFilename == "" { continue }
+			pdbFile := self.saveFile(path.join("results", "centroids", pdbFilename))
+			data.add([clusterId], pdbFile)
+		}
+	}
+
+	return data.build()
+})
