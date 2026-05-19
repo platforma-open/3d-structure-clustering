@@ -215,10 +215,14 @@ def main():
     # the member PDB's primary chain (None for single-chain, "H" for paired
     # antibody Fvs). L-chain FoldSeek decisions are discarded for the cluster
     # assignment; the L-chain sequence is still surfaced in member_sequences.
+    # NaN==NaN is False in pandas, so single-chain rows (both sides None) need
+    # an explicit both-null branch — otherwise every heavy-only row drops out.
     cluster_df["member_primary_chain"] = cluster_df["member_filename"].map(
         primary_chain_by_filename
     )
-    cluster_df = cluster_df[cluster_df["member_chain"] == cluster_df["member_primary_chain"]]
+    mc = cluster_df["member_chain"]
+    mpc = cluster_df["member_primary_chain"]
+    cluster_df = cluster_df[(mc == mpc) | (mc.isna() & mpc.isna())]
     cluster_df = cluster_df.drop(columns=["member_primary_chain"]).reset_index(drop=True)
 
     # FoldSeek can still emit multiple primary-chain rows per input file (chain
@@ -400,12 +404,18 @@ def main():
 
     total = len(assignments)
     singletons = int((summary["size"] == 1).sum())
+    # hasLightChain drives the MSA viewer's sequence-column filter on the UI
+    # side. Heavy-only inputs (single-chain PDBs) write all-empty sequence_L
+    # values; without this flag the viewer would still try to align the empty
+    # L track and kalign would error with "0 sequences found".
+    has_light_chain = any(seq for seq in member_sequences_l)
     summary_json = {
         "totalRows": total,
         "clusterCount": int(len(summary)),
         "singletonCount": singletons,
         "singletonRate": (singletons / total) if total > 0 else 0.0,
         "emptyInput": total == 0,
+        "hasLightChain": has_light_chain,
     }
     with open(os.path.join(args.output_dir, "summary.json"), "w") as fh:
         json.dump(summary_json, fh)

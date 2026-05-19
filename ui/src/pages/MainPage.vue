@@ -3,23 +3,19 @@ import { PlMultiSequenceAlignment } from "@milaboratories/multi-sequence-alignme
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import type { PColumnIdAndSpec, PlSelectionModel, PTableKey } from "@platforma-sdk/model";
-import { getAxisId, isLabelColumn, matchAxisId } from "@platforma-sdk/model";
-import type { PlAgDataTableV2Row } from "@platforma-sdk/ui-vue";
 import {
   PlAccordionSection,
   PlAgDataTableV2,
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
-  PlDatasetSelector,
   PlDropdown,
   PlLogView,
   PlNumberField,
   PlSlideModal,
+  PlTabs,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
-import type { CellRendererSelectorFunc, ICellRendererParams } from "ag-grid-enterprise";
-import type { PTableColumnSpec } from "@platforma-sdk/model";
 import { computed, ref, watch } from "vue";
 import { useApp } from "../app";
 import {
@@ -27,7 +23,7 @@ import {
   alignmentTypeOptions,
   defaultBlockLabelFor,
 } from "@platforma-open/milaboratories.3d-structure-clustering.model";
-import ClusterActionsCell from "../components/ClusterActionsCell.vue";
+import PlDatasetSubsetSelector from "../components/PlDatasetSubsetSelector.vue";
 
 const app = useApp();
 
@@ -57,66 +53,55 @@ function sanitizeFileName(label: string): string {
     .slice(0, 200);
 }
 
-// 3D structure viewer state.
+// Combined viewer modal — one button per cluster row opens a single modal
+// with MSA and 3D-structure tabs.
+type ViewerTab = "msa" | "structure";
+const viewerTabOptions: { label: string; value: ViewerTab }[] = [
+  { label: "MSA", value: "msa" },
+  { label: "3D Structure", value: "structure" },
+];
+const viewerOpen = ref(false);
+const activeViewerTab = ref<ViewerTab>("msa");
 const structureViewerProps = ref<PlStructureViewerProps>();
+const msaSelection = ref<PlSelectionModel>({ axesSpec: [], selectedKeys: [] });
 
-function openStructureViewer(payload: { key: PTableKey; label: string }) {
-  const clusterId = payload.key.at(0);
+function onClusterButtonClicked(key?: PTableKey) {
+  if (!key) return;
+  const clusterId = key.at(0);
   if (clusterId === undefined || clusterId === null) return;
+  const axisSpec = app.model.outputs.clusterAxisSpec;
+  if (!axisSpec) return;
+
+  msaSelection.value = { axesSpec: [axisSpec], selectedKeys: [key] };
+
   const entry = app.model.outputs.centroidPdbsMap?.find((e) => e.key.at(0) === clusterId);
   const handle = entry?.value?.handle;
-  if (!handle) return;
-  const base = sanitizeFileName(payload.label) || String(clusterId);
-  structureViewerProps.value = { handle, fileName: `${base}.pdb` };
+  structureViewerProps.value = handle
+    ? { handle, fileName: `${sanitizeFileName(String(clusterId)) || "cluster"}.pdb` }
+    : undefined;
+
+  viewerOpen.value = true;
 }
 
-function handleStructureViewerVisibility(open: boolean) {
+function handleViewerVisibility(open: boolean) {
+  viewerOpen.value = open;
   if (!open) structureViewerProps.value = undefined;
 }
 
-// MSA viewer state — selection carries the cluster id so the alignment
-// only fans out members of the row the user clicked.
-const msaOpen = ref(false);
-const msaSelection = ref<PlSelectionModel>({ axesSpec: [], selectedKeys: [] });
-
-function openMsa(payload: { key: PTableKey; label: string }) {
-  const axisSpec = app.model.outputs.clusterAxisSpec;
-  if (!axisSpec) return;
-  msaSelection.value = { axesSpec: [axisSpec], selectedKeys: [payload.key] };
-  msaOpen.value = true;
-}
-
 // The MSA viewer asks which p-columns in `msaPf` carry the sequences to align.
-const isSequenceColumn = (column: PColumnIdAndSpec) =>
-  column.spec?.name === "pl7.app/structure/memberSequence";
-
-// Custom cell renderer wired to the cluster-id axis column (either the raw
-// axis cell or its label substitute). Reuses the same axis-id matching
-// pattern as the SDK's built-in cell-button selector.
-const clusterCellRendererSelector = computed<
-  CellRendererSelectorFunc<PlAgDataTableV2Row> | undefined
->(() => {
-  const clusterAxisId = app.model.outputs.clusterAxisId;
-  if (!clusterAxisId) return undefined;
-  return (cellData: ICellRendererParams<PlAgDataTableV2Row>) => {
-    const ctx = cellData.colDef?.context as PTableColumnSpec | undefined;
-    if (!ctx) return undefined;
-    const axisId =
-      ctx.type === "axis"
-        ? ctx.id
-        : isLabelColumn(ctx.spec) && ctx.spec.axesSpec.length === 1
-          ? getAxisId(ctx.spec.axesSpec[0])
-          : undefined;
-    if (!axisId || !matchAxisId(axisId, clusterAxisId)) return undefined;
-    return {
-      component: ClusterActionsCell,
-      params: {
-        onOpenStructure: openStructureViewer,
-        onOpenMsa: openMsa,
-      },
-    };
-  };
-});
+// For heavy-only inputs the L sequence column is present but all-empty, which
+// trips kalign ("0 sequences found"). Gate the L track out when the workflow
+// reports no light chain.
+const isSequenceColumn = (column: PColumnIdAndSpec) => {
+  if (column.spec?.name !== "pl7.app/structure/memberSequence") return false;
+  if (
+    app.model.outputs.hasLightChain === false &&
+    column.spec.domain?.["pl7.app/structure/chain"] === "L"
+  ) {
+    return false;
+  }
+  return true;
+};
 
 const emptyInput = computed(() => app.model.outputs.emptyInput === true);
 const singletonRate = computed(() => app.model.outputs.singletonRate);
@@ -183,15 +168,16 @@ watch(
     <PlAgDataTableV2
       v-model="app.model.data.tableState"
       :settings="tableSettings"
-      :cell-renderer-selector="clusterCellRendererSelector"
+      :show-cell-button-for-axis-id="app.model.outputs.clusterAxisId"
       not-ready-text="Configure the dataset and run."
       no-rows-text="No clusters yet."
+      @cell-button-clicked="onClusterButtonClicked"
     />
 
     <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
       <template #title>Settings</template>
 
-      <PlDatasetSelector
+      <PlDatasetSubsetSelector
         v-model="app.model.data.dataset"
         :options="app.model.outputs.datasetOptions"
         label="3D Structure"
@@ -206,10 +192,10 @@ watch(
         required
       >
         <template #tooltip>
-          <b>CDR-H3 only</b> pre-slices each PDB to the CDR-H3 loop so clustering reflects paratope
-          shape rather than the conserved framework. <b>Full PDB + AA</b> aligns the whole Fv with
-          FoldSeek's 3Di + AA combined score — framework AA conservation inflates similarity.
-          <b>Full PDB</b> aligns the whole Fv with pure TM-align, no AA bias.
+          <b>CDR-H3 Structure</b> pre-slices each PDB to the CDR-H3 loop so clustering reflects
+          paratope shape rather than the conserved framework. <b>Full Structure + AA</b> aligns the
+          whole Fv with FoldSeek's 3Di + AA combined score — framework AA conservation inflates
+          similarity. <b>Full Structure</b> aligns the whole Fv with pure TM-align, no AA bias.
         </template>
       </PlDropdown>
 
@@ -294,24 +280,34 @@ watch(
     </PlSlideModal>
 
     <PlSlideModal
-      :model-value="structureViewerProps !== undefined"
+      :model-value="viewerOpen"
       width="100%"
       :close-on-outside-click="false"
-      @update:model-value="handleStructureViewerVisibility"
+      @update:model-value="handleViewerVisibility"
     >
-      <template #title>Centroid 3D Structure</template>
-      <PlStructureViewer v-if="structureViewerProps" v-bind="structureViewerProps" />
-    </PlSlideModal>
-
-    <PlSlideModal v-model="msaOpen" width="100%" :close-on-outside-click="false">
-      <template #title>Cluster Members — Multiple Sequence Alignment</template>
-      <PlMultiSequenceAlignment
-        v-if="app.model.outputs.msaPf"
-        v-model="app.model.data.alignmentModel"
-        :sequence-column-predicate="isSequenceColumn"
-        :p-frame="app.model.outputs.msaPf"
-        :selection="msaSelection"
-      />
+      <template #title>
+        {{
+          activeViewerTab === "msa"
+            ? "Cluster Members — Multiple Sequence Alignment"
+            : "Centroid 3D Structure"
+        }}
+      </template>
+      <PlTabs v-model="activeViewerTab" :options="viewerTabOptions" />
+      <template v-if="activeViewerTab === 'msa'">
+        <PlMultiSequenceAlignment
+          v-if="app.model.outputs.msaPf"
+          v-model="app.model.data.alignmentModel"
+          :sequence-column-predicate="isSequenceColumn"
+          :p-frame="app.model.outputs.msaPf"
+          :selection="msaSelection"
+        />
+      </template>
+      <template v-else-if="activeViewerTab === 'structure'">
+        <PlStructureViewer v-if="structureViewerProps" v-bind="structureViewerProps" />
+        <PlAlert v-else type="warn">
+          No centroid 3D structure available for the selected cluster.
+        </PlAlert>
+      </template>
     </PlSlideModal>
   </PlBlockPage>
 </template>

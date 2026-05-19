@@ -53,15 +53,15 @@ export const clusteringModeOptions = [
 ] as const;
 
 export const alignmentTypeOptions = [
-  { label: "CDR-H3 only", value: "cdrh3" satisfies AlignmentType },
-  { label: "Full PDB + AA (3Di + AA)", value: "full_pdb_aa" satisfies AlignmentType },
-  { label: "Full PDB (TM-align)", value: "full_pdb" satisfies AlignmentType },
+  { label: "CDR-H3 Structure", value: "cdrh3" satisfies AlignmentType },
+  { label: "Full Structure + AA", value: "full_pdb_aa" satisfies AlignmentType },
+  { label: "Full Structure", value: "full_pdb" satisfies AlignmentType },
 ] as const;
 
 const ALIGNMENT_LABEL: Record<AlignmentType, string> = {
-  cdrh3: "CDR-H3",
-  full_pdb_aa: "Full PDB+AA",
-  full_pdb: "Full PDB",
+  cdrh3: "CDR-H3 Structure",
+  full_pdb_aa: "Full Structure+AA",
+  full_pdb: "Full Structure",
 };
 
 // Mode-appropriate defaults applied by the UI on alignment-scope change.
@@ -284,6 +284,14 @@ export const platforma = BlockModelV3.create(blockDataModel)
   .output("emptyInput", (ctx): boolean | undefined => {
     const raw = ctx.outputs?.resolve("clusteringSummary")?.getDataAsJson();
     return (raw as { emptyInput?: boolean } | undefined)?.emptyInput;
+  })
+
+  // Drives the MSA viewer's sequence-column filter. False for heavy-only
+  // inputs — the L sequence column still exists but holds empty strings, and
+  // kalign chokes on an all-empty track if we don't gate it out.
+  .output("hasLightChain", (ctx): boolean | undefined => {
+    const raw = ctx.outputs?.resolve("clusteringSummary")?.getDataAsJson();
+    return (raw as { hasLightChain?: boolean } | undefined)?.hasLightChain;
   })
 
   .output("clusteringLogHandle", (ctx) => ctx.outputs?.resolve("clusteringLog")?.getLogHandle())

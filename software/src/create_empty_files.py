@@ -66,6 +66,7 @@ def main():
         "singletonCount": 0,
         "singletonRate": 0.0,
         "emptyInput": True,
+        "hasLightChain": False,
     }
     with open(os.path.join(args.output_dir, "summary.json"), "w") as fh:
         json.dump(summary_json, fh)
