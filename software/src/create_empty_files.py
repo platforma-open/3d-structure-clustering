@@ -25,6 +25,7 @@ ABUNDANCES_PER_CLUSTER_COLS = [
     "abundance_per_cluster",
     "abundance_fraction_per_cluster",
 ]
+MEMBER_SEQUENCES_COLS = ["clonotypeKey", "sequence_H", "sequence_L"]
 
 
 def main():
@@ -50,6 +51,14 @@ def main():
     pd.DataFrame(columns=ABUNDANCES_PER_CLUSTER_COLS).to_csv(
         os.path.join(args.output_dir, "abundances-per-cluster.tsv"), sep="\t", index=False
     )
+    pd.DataFrame(columns=MEMBER_SEQUENCES_COLS).to_csv(
+        os.path.join(args.output_dir, "member_sequences.tsv"), sep="\t", index=False
+    )
+
+    # Empty FoldSeek cluster.tsv (no header — FoldSeek emits headerless 2-col TSV)
+    # so the workflow's `foldseekClusters` output is always populated.
+    with open(os.path.join(args.output_dir, "cluster.tsv"), "w"):
+        pass
 
     summary_json = {
         "totalRows": 0,
@@ -57,6 +66,7 @@ def main():
         "singletonCount": 0,
         "singletonRate": 0.0,
         "emptyInput": True,
+        "hasLightChain": False,
     }
     with open(os.path.join(args.output_dir, "summary.json"), "w") as fh:
         json.dump(summary_json, fh)

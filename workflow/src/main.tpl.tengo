@@ -7,6 +7,7 @@ xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 pt := import("@platforma-sdk/workflow-tengo:pt")
 render := import("@platforma-sdk/workflow-tengo:render")
+maps := import("@platforma-sdk/workflow-tengo:maps")
 
 text := import("text")
 
@@ -14,10 +15,13 @@ clusterCols := import(":cluster-cols-conv")
 
 clusteringTpl := assets.importTemplate(":clustering")
 filterPdbsTpl := assets.importTemplate(":filter-pdbs")
+anonymizationTpl := assets.importTemplate(":anonymization")
+deanonimizationTpl := assets.importTemplate(":deanonimization")
 
 wf.prepare(func(args) {
 	bb := wf.createPBundleBuilder()
 	bb.ignoreMissingDomains()
+	// PDB ResourceMap on [clonotypeKey] is the anchor.
 	bb.addAnchor("main", args.dataset.column)
 	if !is_undefined(args.dataset.filter) {
 		bb.addRef(args.dataset.filter)
@@ -47,12 +51,12 @@ wf.prepare(func(args) {
 
 wf.body(func(args) {
 	columns := args.columns
-	pdbSpec := columns.getSpec(args.dataset.column)
+	blockId := wf.blockId().getDataAsJson()
+
+	resolvedPdb := columns.getColumn(args.dataset.column)
+	pdbSpec := resolvedPdb.spec
 	clonotypeAxisSpec := pdbSpec.axesSpec[0]
 	clonotypeAxisName := clonotypeAxisSpec.name
-
-	blockId := wf.blockId().getDataAsJson()
-	resolvedPdb := columns.getColumn(args.dataset.column)
 
 	abundanceColumn := columns.getColumn("abundance")
 	abundanceSpec := abundanceColumn.spec
@@ -60,8 +64,20 @@ wf.body(func(args) {
 	abundanceUnit := text.contains(abundanceSpec.name, "uniqueMoleculeCount") ? "molecules" : "reads"
 	abundanceLabel := abundanceSpec.annotations["pl7.app/label"]
 
+	// Anonymize the sampleId axis (idx 0) before passing abundance to clustering.
+	// The foldseek run becomes input-stable across projects with the same
+	// clonotype set, so identical configurations dedupe instead of conflicting
+	// on non-deterministic exec outputs. The mapping is then applied per-project
+	// to the abundances TSV before xsv import (see deanonimizationTpl).
+	anonymizationResult := render.create(anonymizationTpl, {
+		data: abundanceColumn.data,
+		pKeyIndices: [0]
+	})
+	anonymizedAbundanceData := anonymizationResult.output("anonymizedData")
+	mappingRef := anonymizationResult.output("mapping")
+
 	abundanceTableBuilder := pframes.tsvFileBuilder()
-	abundanceTableBuilder.add(abundanceColumn, { header: "abundance" })
+	abundanceTableBuilder.add({ spec: abundanceSpec, data: anonymizedAbundanceData }, { header: "abundance" })
 	abundanceTableBuilder.setAxisHeader(sampleIdAxisSpec.name, "sampleId")
 	abundanceTableBuilder.setAxisHeader(clonotypeAxisName, "clonotypeKey")
 	abundanceTable := abundanceTableBuilder.build()
@@ -81,7 +97,7 @@ wf.body(func(args) {
 			save("confident_keys.tsv")
 		confidentKeysTsv := keysWf.run().getFile("confident_keys.tsv")
 
-		filterResult := render.createEphemeral(filterPdbsTpl, {
+		filterResult := render.create(filterPdbsTpl, {
 			pdbData: resolvedPdb.data,
 			confidentKeysTsv: confidentKeysTsv
 		})
@@ -96,8 +112,8 @@ wf.body(func(args) {
 		tmScoreThreshold: args.tmScoreThreshold,
 		coverageThreshold: args.coverageThreshold,
 		clusteringMode: args.clusteringMode,
-		cpu: args.cpu,
-		mem: args.mem
+		alignmentType: args.alignmentType,
+		cdrh3FlankResidues: args.cdrh3FlankResidues
 	}
 
 	labelColumns := columns.getColumns("clonotypeKeyLabels")
@@ -110,7 +126,16 @@ wf.body(func(args) {
 		clusteringInputs.clonotypeLabelsTsv = labelsWf.run().getFile("clonotype_labels.tsv")
 	}
 
-	clusteringResult := render.createEphemeral(clusteringTpl, clusteringInputs)
+	// cpu/mem pass through `metaInputs` so they don't enter the wrapper's CID.
+	// Mirrors clonotype-clustering: two block copies with different resource
+	// settings still dedupe at the clusteringTpl level if everything else
+	// matches, and same settings of course dedupe trivially.
+	clusteringResult := render.create(clusteringTpl, clusteringInputs, {
+		metaInputs: {
+			cpu: args.cpu,
+			mem: args.mem
+		}
+	})
 
 	clusterIdAxisSpec := clusterCols.getClusterIdAxisSpec(blockId)
 
@@ -139,7 +164,15 @@ wf.body(func(args) {
 		clusterCols.getClusterLinkSettings(clonotypeAxisSpec, clusterIdAxisSpec),
 		{ splitDataAndSpec: true })
 
-	abundancesPf := xsv.importFile(clusteringResult.output("abundances"), "tsv",
+	// Per-project deanonymization: ephemeral so the mapping is applied fresh
+	// for each project while the underlying clustering computation stays cached.
+	abundancesDeanonimization := render.createEphemeral(deanonimizationTpl, {
+		mapping: mappingRef,
+		clusteringResult: clusteringResult.output("abundances")
+	})
+	deanonimizedAbundancesTsv := abundancesDeanonimization.output("deanonimizedTsv")
+
+	abundancesPf := xsv.importFile(deanonimizedAbundancesTsv, "tsv",
 		clusterCols.getPerSampleClusterAbundanceSettings(
 			sampleIdAxisSpec, clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit),
 		{ splitDataAndSpec: true })
@@ -178,12 +211,47 @@ wf.body(func(args) {
 	)
 	centroidPdbsPf := centroidPdbsPfBuilder.build()
 
+	// MSA pframe: per-clonotype sequence + cluster↔clonotype linker + distance
+	// to centroid. Mirrors clonotype-clustering's msaPf shape so
+	// `PlMultiSequenceAlignment` can fan a selected cluster out to its members
+	// and order them by structural distance.
+	memberSequencesPf := xsv.importFile(clusteringResult.output("memberSequences"), "tsv",
+		clusterCols.getMemberSequencesSettings(clonotypeAxisSpec),
+		{ splitDataAndSpec: true })
+
+	// Stable, content-derived keys: avoids tying iteration order (Tengo map
+	// iteration is randomized) to field naming, which would destabilize the
+	// builder's CID once memberSequencesPf has more than one entry.
+	msaPfBuilder := pframes.pFrameBuilder()
+	for k in maps.getKeys(memberSequencesPf) {
+		v := memberSequencesPf[k]
+		msaPfBuilder.add("seq." + k, trace.inject(v.spec), v.data)
+	}
+	for k in maps.getKeys(clusterLinkPf) {
+		v := clusterLinkPf[k]
+		msaPfBuilder.add("link." + k, trace.inject(v.spec), v.data)
+	}
+	for k in maps.getKeys(clusterAssignmentsPf) {
+		if k == "tmDistanceToCentroid" {
+			v := clusterAssignmentsPf[k]
+			msaPfBuilder.add("dist." + k, trace.inject(v.spec), v.data)
+		}
+	}
+	msaPf := msaPfBuilder.build()
+
 	return {
 		outputs: {
 			clustersTable: pframes.exportFrame(clustersPf),
 			centroidPdbsMap: pframes.exportFrame(centroidPdbsPf),
+			msaPf: pframes.exportFrame(msaPf),
 			clusteringSummary: clusteringResult.output("summary"),
-			clusteringLog: clusteringResult.output("log")
+			clusteringLog: clusteringResult.output("log"),
+			// Anchor the raw FoldSeek result_cluster.tsv in the workflow output.
+			// FoldSeek's threaded output is non-deterministic (row order, embedded
+			// stdout timings); without this anchor a second block copy with
+			// identical parameters triggers a CIDConflictError on the inner exec's
+			// outputs/files. Mirrors clonotype-clustering's `mmseqs` output.
+			foldseekClusters: clusteringResult.output("foldseekClusters")
 		},
 		exports: {
 			clusters: clustersPf,

@@ -8,6 +8,12 @@ For each cluster the block reports cluster size, cluster radius (max TM-distance
 
 The UI has three pages: a per-cluster table (size, radius, abundance totals, centroid label), a "Most Abundant Clusters" bubble plot (sample × cluster, sized by per-sample abundance, coloured by cluster size), and a cluster-size histogram.
 
+## Multi-chain assumption
+
+The block accepts both single-chain (heavy-only) and paired H+L PDB inputs. **Cluster assignment is heavy-chain driven**: FoldSeek's `easy-cluster` mode clusters each PDB chain independently, and the block keeps only the row corresponding to each member's heavy chain (chain id `H` in the PDB; for non-standard chain naming the first chain by alphabetical order is used and a warning is logged). The L-chain FoldSeek decisions are discarded for the cluster assignment.
+
+TM-distance to centroid is computed on the heavy chain only and reflects the alignment scope (CDR-H3 loop in `cdrh3` alignment mode, full chain otherwise). The per-cluster MSA viewer surfaces both heavy and light chain sequences (`sequence_H` and `sequence_L`) so paired antibodies can be inspected; for heavy-only inputs the light-chain column is empty.
+
 FoldSeek is developed by the [Steinegger Lab](https://steineggerlab.com/). Please cite:
 
 > van Kempen M, Kim SS, Tumescheit C, Mirdita M, Lee J, Gilchrist CLM, Söding J, Steinegger M. *Fast and accurate protein structure search with Foldseek.* Nature Biotechnology, 42, 243–246 (2024). [https://doi.org/10.1038/s41587-023-01773-0](https://doi.org/10.1038/s41587-023-01773-0)

@@ -1,0 +1,24 @@
+// Anonymize a PColumnData resource by hashing the requested key indices.
+// Used to strip project-specific sampleId values from the abundance column
+// before clustering so the heavy foldseek run can dedupe across projects with
+// the same underlying clonotypes/PDBs. Deanonymization is applied per-project
+// to the clustering result (see deanonimization.tpl.tengo).
+
+self := import("@platforma-sdk/workflow-tengo:tpl")
+anonymization := import("@platforma-sdk/workflow-tengo:anonymize")
+ll := import("@platforma-sdk/workflow-tengo:ll")
+
+self.defineOutputs("anonymizedData", "mapping")
+
+self.body(func(args) {
+	ll.assert(!is_undefined(args.data), "anonymization: data is required")
+	ll.assert(!is_undefined(args.pKeyIndices), "anonymization: pKeyIndices is required")
+
+	result := anonymization.anonymizePKeys(args.data, args.pKeyIndices)
+	resultMap := ll.fromStrict(result)
+
+	return {
+		anonymizedData: resultMap.result,
+		mapping: resultMap.mapping
+	}
+})

@@ -109,7 +109,7 @@ getClusterSummarySettings := func(clusterIdAxisSpec) {
 					valueType: "Long",
 					name: "pl7.app/structure/clustering/clusterSize",
 					annotations: {
-						"pl7.app/label": "Cluster size",
+						"pl7.app/label": "Cluster Size",
 						"pl7.app/table/visibility": "default",
 						"pl7.app/table/orderPriority": "9000",
 						"pl7.app/isAbundance": "true"
@@ -122,13 +122,13 @@ getClusterSummarySettings := func(clusterIdAxisSpec) {
 					valueType: "Double",
 					name: "pl7.app/structure/clustering/clusterRadius",
 					annotations: {
-						"pl7.app/label": "Cluster radius (TM-dist)",
+						"pl7.app/label": "Cluster Radius (TM-dist)",
 						"pl7.app/min": "0",
 						"pl7.app/max": "1",
 						"pl7.app/format": ".3f",
 						"pl7.app/rankingOrder": "decreasing",
 						"pl7.app/table/visibility": "default",
-						"pl7.app/table/orderPriority": "8000"
+						"pl7.app/table/orderPriority": "8800"
 					}
 				}
 			}
@@ -272,6 +272,38 @@ getClusterTotalAbundanceSettings := func(clusterIdAxisSpec, abundanceSpec, abund
 	}
 }
 
+// xsv.importFile settings for member_sequences.tsv — per-clonotype amino-acid
+// sequences extracted from each member's PDB ATOM records (loop fragment in
+// cdrh3 mode, full chain otherwise). Two columns: sequence_H (heavy chain)
+// and sequence_L (light chain — empty for heavy-only inputs). Both pcolumns
+// share the same spec.name so the per-cluster MSA viewer picks them up as
+// alignable tracks; they are distinguished by domain.pl7.app/structure/chain.
+getMemberSequencesSettings := func(clonotypeAxisSpec) {
+	memberSeqSpec := func(chain, labelChain) {
+		return {
+			valueType: "String",
+			name: "pl7.app/structure/memberSequence",
+			domain: {
+				"pl7.app/alphabet": "aminoacid",
+				"pl7.app/structure/chain": chain
+			},
+			annotations: {
+				"pl7.app/label": "Member sequence " + labelChain + " (from PDB)",
+				"pl7.app/table/visibility": "hidden"
+			}
+		}
+	}
+	return {
+		axes: [{ column: "clonotypeKey", spec: clonotypeAxisSpec }],
+		columns: [
+			{ column: "sequence_H", spec: memberSeqSpec("H", "H") },
+			{ column: "sequence_L", spec: memberSeqSpec("L", "L") }
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 0
+	}
+}
+
 // Centroid PDB ResourceMap PColumn spec — applied when adding the workdir-
 // processor map to the output pFrameBuilder.
 getCentroidPdbsPColumnSpec := func(clusterIdAxisSpec) {
@@ -296,5 +328,6 @@ export ll.toStrict({
 	getClusterLinkSettings: getClusterLinkSettings,
 	getPerSampleClusterAbundanceSettings: getPerSampleClusterAbundanceSettings,
 	getClusterTotalAbundanceSettings: getClusterTotalAbundanceSettings,
+	getMemberSequencesSettings: getMemberSequencesSettings,
 	getCentroidPdbsPColumnSpec: getCentroidPdbsPColumnSpec
 })

@@ -41,6 +41,12 @@
           "artifact": "py-archive",
           "cmd": ["python", "{pkg}/filter_pdbs.py"]
         }
+      },
+      "extract-cdrh3": {
+        "binary": {
+          "artifact": "py-archive",
+          "cmd": ["python", "{pkg}/extract_cdrh3.py"]
+        }
       }
     }
   },
