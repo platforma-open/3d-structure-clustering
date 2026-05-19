@@ -1,6 +1,6 @@
 {
   "name": "@platforma-open/milaboratories.3d-structure-clustering.software",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Block Software",
   "scripts": {
@@ -27,25 +27,37 @@
       "process-results": {
         "binary": {
           "artifact": "py-archive",
-          "cmd": ["python", "{pkg}/process_results.py"]
+          "cmd": [
+            "python",
+            "{pkg}/process_results.py"
+          ]
         }
       },
       "create-empty-files": {
         "binary": {
           "artifact": "py-archive",
-          "cmd": ["python", "{pkg}/create_empty_files.py"]
+          "cmd": [
+            "python",
+            "{pkg}/create_empty_files.py"
+          ]
         }
       },
       "filter-pdbs": {
         "binary": {
           "artifact": "py-archive",
-          "cmd": ["python", "{pkg}/filter_pdbs.py"]
+          "cmd": [
+            "python",
+            "{pkg}/filter_pdbs.py"
+          ]
         }
       },
       "extract-cdrh3": {
         "binary": {
           "artifact": "py-archive",
-          "cmd": ["python", "{pkg}/extract_cdrh3.py"]
+          "cmd": [
+            "python",
+            "{pkg}/extract_cdrh3.py"
+          ]
         }
       }
     }
