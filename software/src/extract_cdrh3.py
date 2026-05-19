@@ -48,6 +48,7 @@ def _parse_cdrh3_remark(src: Path) -> tuple[str, int, int] | None:
 def _slice_pdb(src: Path, dst: Path, chain: str, lo: int, hi: int, flank: int) -> int:
     """Write a CDR-H3 slice of `src` to `dst`. Returns kept ATOM/HETATM count."""
     kept = 0
+    kept_end = False
     lo_eff = lo - flank
     hi_eff = hi + flank
     with open(src) as fh_in, open(dst, "w") as fh_out:
@@ -72,7 +73,8 @@ def _slice_pdb(src: Path, dst: Path, chain: str, lo: int, hi: int, flank: int) -
                     fh_out.write(line)
             elif line.startswith("END"):
                 fh_out.write(line)
-        if kept > 0:
+                kept_end = True
+        if kept > 0 and not kept_end:
             fh_out.write("END\n")
     return kept
 

@@ -53,7 +53,7 @@ self.body(func(inputs) {
 	coverage := is_undefined(inputs.coverageThreshold) ? 0.9 : inputs.coverageThreshold
 	mode := is_undefined(inputs.clusteringMode) ? "easy-cluster" : inputs.clusteringMode
 	alignmentType := is_undefined(inputs.alignmentType) ? "full_pdb_aa" : inputs.alignmentType
-	cdrh3Flank := is_undefined(inputs.cdrh3FlankResidues) ? 10 : inputs.cdrh3FlankResidues
+	cdrh3Flank := is_undefined(inputs.cdrh3FlankResidues) ? 5 : inputs.cdrh3FlankResidues
 	cpu := is_undefined(inputs.cpu) ? 16 : inputs.cpu
 	memGiB := is_undefined(inputs.mem) ? 32 : inputs.mem
 
