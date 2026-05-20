@@ -98,6 +98,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
     if (data.dataset === undefined) throw new Error("Select a dataset");
     return {
       customBlockLabel: data.customBlockLabel,
+      defaultBlockLabel: data.defaultBlockLabel,
       dataset: data.dataset.primary,
       tmScoreThreshold: data.tmScoreThreshold,
       coverageThreshold: data.coverageThreshold,
@@ -298,7 +299,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
 
   .title(() => "3D Structure Clustering")
 
-  .subtitle((ctx) => ctx.data.customBlockLabel || defaultBlockLabelFor(ctx.data))
+  .subtitle((ctx) => ctx.data.customBlockLabel || ctx.data.defaultBlockLabel)
 
   .sections((_ctx) => [
     { type: "link", href: "/", label: "Main" },
