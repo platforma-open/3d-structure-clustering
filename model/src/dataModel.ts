@@ -24,7 +24,6 @@ const initialBubbleState = () =>
 
 export const blockDataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
   customBlockLabel: "",
-  defaultBlockLabel: "",
 
   tmScoreThreshold: 0.95,
   coverageThreshold: 0.9,

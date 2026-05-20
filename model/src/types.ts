@@ -34,7 +34,6 @@ export type BlockArgs = {
 
 export type BlockData = {
   customBlockLabel: string;
-  defaultBlockLabel: string;
 
   dataset?: DatasetSelection;
 

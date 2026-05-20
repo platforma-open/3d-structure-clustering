@@ -21,6 +21,7 @@ import { useApp } from "../app";
 import {
   ALIGNMENT_DEFAULTS,
   alignmentTypeOptions,
+  defaultBlockLabelFor,
 } from "@platforma-open/milaboratories.3d-structure-clustering.model";
 import PlDatasetSubsetSelector from "../components/PlDatasetSubsetSelector.vue";
 
@@ -139,7 +140,7 @@ watch(
 <template>
   <PlBlockPage
     v-model:subtitle="app.model.data.customBlockLabel"
-    :subtitle-placeholder="app.model.data.defaultBlockLabel"
+    :subtitle-placeholder="defaultBlockLabelFor(app.model.data)"
     title="3D Structure Clustering"
   >
     <template #append>
