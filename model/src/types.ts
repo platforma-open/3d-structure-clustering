@@ -19,6 +19,7 @@ export type AlignmentType = "cdrh3" | "full_pdb_aa" | "full_pdb";
 
 export type BlockArgs = {
   customBlockLabel: string;
+  defaultBlockLabel: string;
 
   dataset: PrimaryRef;
 

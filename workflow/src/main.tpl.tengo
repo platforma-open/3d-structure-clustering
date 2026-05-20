@@ -139,13 +139,17 @@ wf.body(func(args) {
 
 	clusterIdAxisSpec := clusterCols.getClusterIdAxisSpec(blockId)
 
+	traceLabel := args.customBlockLabel
+	if traceLabel == "" {
+		traceLabel = args.defaultBlockLabel
+	}
 	trace := pSpec.makeTrace(
 		pdbSpec,
 		{
-			type: "milaboratories.3d-structure-clustering",
+			type: "milaboratories.3d-structure-clustering.clustering",
 			id: blockId,
 			importance: 30,
-			label: "3D Structure Clustering"
+			label: traceLabel
 		}
 	)
 

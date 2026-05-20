@@ -98,6 +98,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
     if (data.dataset === undefined) throw new Error("Select a dataset");
     return {
       customBlockLabel: data.customBlockLabel,
+      defaultBlockLabel: defaultBlockLabelFor(data),
       dataset: data.dataset.primary,
       tmScoreThreshold: data.tmScoreThreshold,
       coverageThreshold: data.coverageThreshold,
