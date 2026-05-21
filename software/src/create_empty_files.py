@@ -26,6 +26,7 @@ ABUNDANCES_PER_CLUSTER_COLS = [
     "abundance_fraction_per_cluster",
 ]
 MEMBER_SEQUENCES_COLS = ["clonotypeKey", "sequence_H", "sequence_L"]
+CENTROID_SEQUENCES_COLS = ["clusterId", "centroidSequence_H", "centroidSequence_L"]
 
 
 def main():
@@ -53,6 +54,9 @@ def main():
     )
     pd.DataFrame(columns=MEMBER_SEQUENCES_COLS).to_csv(
         os.path.join(args.output_dir, "member_sequences.tsv"), sep="\t", index=False
+    )
+    pd.DataFrame(columns=CENTROID_SEQUENCES_COLS).to_csv(
+        os.path.join(args.output_dir, "centroid_sequences.tsv"), sep="\t", index=False
     )
 
     # Empty FoldSeek cluster.tsv (no header — FoldSeek emits headerless 2-col TSV)

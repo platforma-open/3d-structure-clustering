@@ -304,6 +304,41 @@ getMemberSequencesSettings := func(clonotypeAxisSpec) {
 	}
 }
 
+// xsv.importFile settings for centroid_sequences.tsv — per-cluster amino-acid
+// sequences extracted from the centroid PDB. Heavy (H) is always populated;
+// light (L) is empty for heavy-only inputs. The model gates L visibility on
+// `hasLightChain` to hide the empty column in single-chain datasets.
+// Distinct from `pl7.app/structure/memberSequence` (per-clonotype) — this
+// projection lives on the cluster axis so it surfaces in the per-cluster
+// result table. Optional visibility — off by default in the picker, the user
+// toggles them on when they want sequence context alongside the cluster row.
+getCentroidSequencesSettings := func(clusterIdAxisSpec) {
+	centroidSeqSpec := func(chain, labelChain) {
+		return {
+			valueType: "String",
+			name: "pl7.app/structure/centroidSequence",
+			domain: {
+				"pl7.app/alphabet": "aminoacid",
+				"pl7.app/structure/chain": chain
+			},
+			annotations: {
+				"pl7.app/label": "Centroid " + labelChain + " Chain Sequence",
+				"pl7.app/table/visibility": "optional",
+				"pl7.app/table/orderPriority": "8700"
+			}
+		}
+	}
+	return {
+		axes: [{ column: "clusterId", spec: clusterIdAxisSpec }],
+		columns: [
+			{ column: "centroidSequence_H", spec: centroidSeqSpec("H", "Heavy") },
+			{ column: "centroidSequence_L", spec: centroidSeqSpec("L", "Light") }
+		],
+		storageFormat: "Parquet",
+		partitionKeyLength: 0
+	}
+}
+
 // Centroid PDB ResourceMap PColumn spec — applied when adding the workdir-
 // processor map to the output pFrameBuilder.
 getCentroidPdbsPColumnSpec := func(clusterIdAxisSpec) {
@@ -329,5 +364,6 @@ export ll.toStrict({
 	getPerSampleClusterAbundanceSettings: getPerSampleClusterAbundanceSettings,
 	getClusterTotalAbundanceSettings: getClusterTotalAbundanceSettings,
 	getMemberSequencesSettings: getMemberSequencesSettings,
+	getCentroidSequencesSettings: getCentroidSequencesSettings,
 	getCentroidPdbsPColumnSpec: getCentroidPdbsPColumnSpec
 })

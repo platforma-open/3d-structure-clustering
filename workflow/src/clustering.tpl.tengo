@@ -41,6 +41,7 @@ self.defineOutputs(
 	"abundances",
 	"abundancesPerCluster",
 	"memberSequences",
+	"centroidSequences",
 	"summary",
 	"log",
 	"foldseekClusters"
@@ -84,6 +85,7 @@ self.body(func(inputs) {
 			saveFile("results/abundances.tsv").
 			saveFile("results/abundances-per-cluster.tsv").
 			saveFile("results/member_sequences.tsv").
+			saveFile("results/centroid_sequences.tsv").
 			saveFile("results/cluster.tsv").
 			saveFileContent("results/summary.json").
 			processWorkdir("centroidPdbsMap", buildCentroidPdbsMapTpl, {}).
@@ -98,6 +100,7 @@ self.body(func(inputs) {
 			abundances: emptyRun.getFile("results/abundances.tsv"),
 			abundancesPerCluster: emptyRun.getFile("results/abundances-per-cluster.tsv"),
 			memberSequences: emptyRun.getFile("results/member_sequences.tsv"),
+			centroidSequences: emptyRun.getFile("results/centroid_sequences.tsv"),
 			summary: emptyRun.getFileContent("results/summary.json"),
 			log: emptyRun.getStdoutStream(),
 			foldseekClusters: emptyRun.getFile("results/cluster.tsv")
@@ -217,6 +220,7 @@ self.body(func(inputs) {
 		saveFile("results/abundances.tsv").
 		saveFile("results/abundances-per-cluster.tsv").
 		saveFile("results/member_sequences.tsv").
+		saveFile("results/centroid_sequences.tsv").
 		saveFileContent("results/summary.json").
 		processWorkdir("centroidPdbsMap", buildCentroidPdbsMapTpl, {}).
 		printErrStreamToStdout().
@@ -231,6 +235,7 @@ self.body(func(inputs) {
 		abundances: procRun.getFile("results/abundances.tsv"),
 		abundancesPerCluster: procRun.getFile("results/abundances-per-cluster.tsv"),
 		memberSequences: procRun.getFile("results/member_sequences.tsv"),
+		centroidSequences: procRun.getFile("results/centroid_sequences.tsv"),
 		summary: procRun.getFileContent("results/summary.json"),
 		log: fsRun.getStdoutStream(),
 		foldseekClusters: clusterTsv
