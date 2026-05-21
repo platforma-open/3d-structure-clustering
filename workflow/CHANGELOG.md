@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering.workflow
 
+## 1.0.3
+
+### Patch Changes
+
+- 3bbd5eb: Add centroid heavy/light chain sequence columns to the per-cluster result table. Sequences are extracted from the centroid PDB by `process_results.py` and projected onto the cluster axis as a separate `centroid_sequences.tsv` (mirrors clonotype-clustering's `clusterToSeq` pattern). The light-chain column is hidden on heavy-only datasets via `hasLightChain`.
+
 ## 1.0.2
 
 ### Patch Changes
