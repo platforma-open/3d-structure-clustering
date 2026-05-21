@@ -338,6 +338,24 @@ def main():
     )
     summary.to_csv(os.path.join(args.output_dir, "cluster_summary.tsv"), sep="\t", index=False)
 
+    # Per-cluster centroid sequences (axis: clusterId). Mirrors
+    # clonotype-clustering's clusterToSeq.tsv pattern — projects the centroid
+    # row's sequences onto the cluster axis so they surface in the per-cluster
+    # result table.
+    centroid_seq_df = (
+        cluster_df.loc[cluster_df["isCentroid"] == 1,
+                       ["clusterId", "sequence_H", "sequence_L"]]
+        .drop_duplicates("clusterId")
+        .rename(columns={
+            "sequence_H": "centroidSequence_H",
+            "sequence_L": "centroidSequence_L",
+        })
+        .sort_values("clusterId")
+    )
+    centroid_seq_df.to_csv(
+        os.path.join(args.output_dir, "centroid_sequences.tsv"), sep="\t", index=False
+    )
+
     # Abundance aggregates. Inner-join with the cluster set drops abundance
     # rows for clonotypes without a PDB. Per-sample fraction sums to 1 within
     # each sample; per-cluster fraction sums to 1 globally.

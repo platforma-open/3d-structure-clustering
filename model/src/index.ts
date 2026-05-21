@@ -54,7 +54,7 @@ export const clusteringModeOptions = [
 
 export const alignmentTypeOptions = [
   { label: "CDR-H3 Structure", value: "cdrh3" satisfies AlignmentType },
-  { label: "Full Structure + AA", value: "full_pdb_aa" satisfies AlignmentType },
+  { label: "Full Structure + aa Sequence", value: "full_pdb_aa" satisfies AlignmentType },
   { label: "Full Structure", value: "full_pdb" satisfies AlignmentType },
 ] as const;
 
@@ -166,6 +166,13 @@ export const platforma = BlockModelV3.create(blockDataModel)
     )?.spec;
     if (anchorSpec === undefined) return undefined;
 
+    // Hide the L centroid sequence column on heavy-only datasets — the
+    // workflow emits an empty column there, same shape as the MSA viewer's
+    // L-track gate (see `hasLightChain` below).
+    const summary = ctx.outputs?.resolve("clusteringSummary")?.getDataAsJson();
+    const hasLightChain =
+      (summary as { hasLightChain?: boolean } | undefined)?.hasLightChain ?? true;
+
     return createPlDataTableV3(ctx, {
       columns: {
         sources: [new OutputColumnProvider(acc)],
@@ -173,6 +180,18 @@ export const platforma = BlockModelV3.create(blockDataModel)
         selector: { mode: "enrichment", maxHops: 0 },
       },
       tableState: ctx.data.tableState,
+      displayOptions: hasLightChain
+        ? undefined
+        : {
+            visibility: [
+              {
+                match: (spec) =>
+                  spec.name === "pl7.app/structure/centroidSequence" &&
+                  spec.domain?.["pl7.app/structure/chain"] === "L",
+                visibility: "hidden",
+              },
+            ],
+          },
     });
   })
 

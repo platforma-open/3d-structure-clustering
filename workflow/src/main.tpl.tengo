@@ -186,6 +186,13 @@ wf.body(func(args) {
 			clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit),
 		{ splitDataAndSpec: true })
 
+	// Per-cluster centroid sequences (axis: clusterId). Mirrors
+	// clonotype-clustering's `clusterToSeq` projection so the centroid's H/L
+	// sequences appear in the per-cluster result table.
+	centroidSequencesPf := xsv.importFile(clusteringResult.output("centroidSequences"), "tsv",
+		clusterCols.getCentroidSequencesSettings(clusterIdAxisSpec),
+		{ splitDataAndSpec: true })
+
 	// Prefix builder keys per-source so the `clusterLabel` column doesn't
 	// collide between the per-clonotype assignment and per-cluster summary
 	// tables (different specs, same column id).
@@ -204,6 +211,9 @@ wf.body(func(args) {
 	}
 	for k, v in abundancesPerClusterPf {
 		clustersPfBuilder.add("abundTotal." + k, trace.inject(v.spec), v.data)
+	}
+	for k, v in centroidSequencesPf {
+		clustersPfBuilder.add("centroidSeq." + k, trace.inject(v.spec), v.data)
 	}
 	clustersPf := clustersPfBuilder.build()
 
