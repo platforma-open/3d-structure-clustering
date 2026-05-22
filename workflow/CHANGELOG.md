@@ -1,5 +1,12 @@
 # @platforma-open/milaboratories.3d-structure-clustering.workflow
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [2ce6662]
+  - @platforma-open/milaboratories.3d-structure-clustering.software@1.0.2
+
 ## 1.0.3
 
 ### Patch Changes
