@@ -1,5 +1,12 @@
 # @platforma-open/milaboratories.3d-structure-clustering.ui
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [d04a8ac]
+  - @platforma-open/milaboratories.3d-structure-clustering.model@1.0.4
+
 ## 1.0.3
 
 ### Patch Changes

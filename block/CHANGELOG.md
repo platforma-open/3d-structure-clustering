@@ -1,5 +1,14 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.0.5
+
+### Patch Changes
+
+- d04a8ac: Drop the filter native-label override in the dataset selector. 3d-structure-prediction now emits per-kind trace labels (e.g. `"Confident structures - <instance>"`), so `deriveDistinctLabels` already returns unique, instance-aware labels — the override was clipping them back to just `"Confident structures"` and losing the instance discriminator when multiple prediction blocks were present. Chain-aware primary-label naming is unchanged.
+- Updated dependencies [d04a8ac]
+  - @platforma-open/milaboratories.3d-structure-clustering.model@1.0.4
+  - @platforma-open/milaboratories.3d-structure-clustering.ui@1.0.4
+
 ## 1.0.4
 
 ### Patch Changes

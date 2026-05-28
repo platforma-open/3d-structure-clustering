@@ -1,6 +1,6 @@
 {
   "name": "@platforma-open/milaboratories.3d-structure-clustering.ui",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "fmt": "ts-builder format",
