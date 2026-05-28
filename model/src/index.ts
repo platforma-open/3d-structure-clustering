@@ -123,8 +123,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
     if (options === undefined) return undefined;
     return options.map((opt) => {
       // Primary label override — rename the dropdown entries with chain-aware
-      // suffixes ("3D Structure (IGHeavy)"). Independent of the filter
-      // disambiguation problem below.
+      // suffixes ("3D Structure (IGHeavy)").
       const primarySpec = ctx.resultPool.getPColumnSpecByRef(opt.primary.ref);
       const chain =
         primarySpec !== undefined && isPColumnSpec(primarySpec)
