@@ -122,6 +122,9 @@ export const platforma = BlockModelV3.create(blockDataModel)
     });
     if (options === undefined) return undefined;
     return options.map((opt) => {
+      // Primary label override — rename the dropdown entries with chain-aware
+      // suffixes ("3D Structure (IGHeavy)"). Independent of the filter
+      // disambiguation problem below.
       const primarySpec = ctx.resultPool.getPColumnSpecByRef(opt.primary.ref);
       const chain =
         primarySpec !== undefined && isPColumnSpec(primarySpec)
@@ -129,24 +132,9 @@ export const platforma = BlockModelV3.create(blockDataModel)
           : undefined;
       const primaryLabel = chain ? `3D Structure (${chain})` : "3D Structure";
 
-      // SDK 1.76.5 suppresses filters' `pl7.app/label` in `filterMatchesToOptions`
-      // (filter_discovery.ts:74-77 — `formatters.native` is hardcoded to return
-      // undefined). Filter columns with identical traces collapse to the same
-      // trace-derived label. Override post-hoc with each filter's own
-      // `pl7.app/label`.
-      const filters = opt.filters?.map((f) => {
-        const filterSpec = ctx.resultPool.getPColumnSpecByRef(f.ref);
-        const native =
-          filterSpec !== undefined && isPColumnSpec(filterSpec)
-            ? filterSpec.annotations?.["pl7.app/label"]
-            : undefined;
-        return native ? { ...f, label: native } : f;
-      });
-
       return {
         ...opt,
         primary: { ...opt.primary, label: primaryLabel },
-        ...(filters !== undefined && filters.length > 0 ? { filters } : {}),
       };
     });
   })
