@@ -58,16 +58,22 @@ self.body(func(inputs) {
 	cpu := is_undefined(inputs.cpu) ? 16 : inputs.cpu
 	memGiB := is_undefined(inputs.mem) ? 32 : inputs.mem
 
+	// Stage each PDB under a synthetic, FoldSeek-safe filename and carry the
+	// clonotypeKey -> staged_filename mapping in the manifest.
 	manifestLines := ["clonotypeKey\tstaged_filename\tbin"]
 	stagedFiles := {}
 	inputMap := inputData.inputs()
+	idx := 0
 	for sKey in maps.getKeys(inputMap) {
 		pdbFile := inputMap[sKey]
 		key := json.decode(sKey)
 		ll.assert(len(key) == 1,
 			"unexpected aggregation key length %d (expected 1, got %v)", len(key), key)
 		clonotypeKey := key[0]
-		filename := string(clonotypeKey) + ".pdb"
+		idx++
+		suffix := string(idx)
+		for len(suffix) < 7 { suffix = "0" + suffix }
+		filename := "s" + suffix + ".pdb"
 		manifestLines = append(manifestLines, string(clonotypeKey) + "\t" + filename + "\tall")
 		stagedFiles["pdbs/" + filename] = pdbFile
 	}
