@@ -1,4 +1,8 @@
 ---
+'@platforma-open/milaboratories.3d-structure-clustering': patch
+'@platforma-open/milaboratories.3d-structure-clustering.model': patch
+'@platforma-open/milaboratories.3d-structure-clustering.software': patch
+'@platforma-open/milaboratories.3d-structure-clustering.ui': patch
 '@platforma-open/milaboratories.3d-structure-clustering.workflow': patch
 ---
 

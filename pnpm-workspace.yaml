@@ -9,21 +9,21 @@ packages:
 catalog:
   "@milaboratories/ts-builder": 1.5.0
   "@milaboratories/ts-configs": 1.2.3
-  "@platforma-sdk/workflow-tengo": 6.0.0
-  "@platforma-sdk/block-tools": 2.9.2
-  "@platforma-sdk/model": 1.77.11
-  "@platforma-sdk/ui-vue": 1.77.11
-  "@platforma-sdk/test": 1.77.14
-  "@platforma-sdk/tengo-builder": 3.0.5
-  "@platforma-sdk/package-builder": 3.12.0
+  "@platforma-sdk/workflow-tengo": 6.3.1
+  "@platforma-sdk/block-tools": 2.10.7
+  "@platforma-sdk/model": 1.78.7
+  "@platforma-sdk/ui-vue": 1.78.7
+  "@platforma-sdk/test": 1.78.7
+  "@platforma-sdk/tengo-builder": 4.0.6
+  "@platforma-sdk/package-builder": 3.13.0
   "@platforma-sdk/blocks-deps-updater": 2.2.0
 
   "@platforma-open/milaboratories.runenv-python-3": 1.8.3
   "@platforma-open/steineggerlab.software-foldseek": 1.1.0
 
-  "@milaboratories/graph-maker": 1.4.4
+  "@milaboratories/graph-maker": 1.4.6
   "@milaboratories/helpers": 1.14.2
-  "@milaboratories/multi-sequence-alignment": 1.47.14
+  "@milaboratories/multi-sequence-alignment": 1.47.16
   "@milaboratories/structure-viewer": 0.3.0
   "ag-grid-enterprise": ~34.1.2
 
