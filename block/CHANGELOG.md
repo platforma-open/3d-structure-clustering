@@ -1,5 +1,15 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.0.6
+
+### Patch Changes
+
+- 7ce563e: Stage PDBs under synthetic FoldSeek-safe filenames instead of the raw clonotypeKey. FoldSeek does not echo arbitrary filename stems back verbatim, which broke the member→clonotypeKey round-trip in process_results.py for certain datasets ("FoldSeek output references unknown member files"). The clonotypeKey↔filename mapping is now carried solely through the manifest.
+- Updated dependencies [7ce563e]
+  - @platforma-open/milaboratories.3d-structure-clustering.model@1.0.5
+  - @platforma-open/milaboratories.3d-structure-clustering.ui@1.0.5
+  - @platforma-open/milaboratories.3d-structure-clustering.workflow@1.0.5
+
 ## 1.0.5
 
 ### Patch Changes
