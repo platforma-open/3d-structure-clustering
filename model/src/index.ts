@@ -63,7 +63,7 @@ export const ALIGNMENT_DEFAULTS: Record<
 export function defaultBlockLabelFor(args: Partial<BlockData>): string {
   const parts: string[] = [`${ALIGNMENT_LABEL[args.alignmentType ?? "full_pdb_aa"]}`];
   parts.push(`TM≥${(args.tmScoreThreshold ?? 0.95).toFixed(2)}`);
-  parts.push(`cov≥${(args.coverageThreshold ?? 0.9).toFixed(2)}`);
+  parts.push(`cov≥${(args.coverageThreshold ?? 0.95).toFixed(2)}`);
   if (args.clusteringMode === "easy-linclust") parts.push("linclust");
   return parts.join(", ");
 }

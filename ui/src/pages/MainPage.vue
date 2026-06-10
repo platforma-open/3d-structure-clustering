@@ -150,7 +150,7 @@ watch(
 
     <PlAlert v-if="emptyInput" type="warn">
       No confident PDB structures available. Verify the upstream block ran successfully and the
-      confidence subset is populated.
+      PDB dataset is populated.
     </PlAlert>
 
     <PlAlert v-if="singletonAlertVisible" type="info" closable>
