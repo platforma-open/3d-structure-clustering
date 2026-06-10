@@ -9,6 +9,7 @@ import {
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
+  PlDatasetSelector,
   PlDropdown,
   PlLogView,
   PlNumberField,
@@ -23,7 +24,6 @@ import {
   alignmentTypeOptions,
   defaultBlockLabelFor,
 } from "@platforma-open/milaboratories.3d-structure-clustering.model";
-import PlDatasetSubsetSelector from "../components/PlDatasetSubsetSelector.vue";
 
 const app = useApp();
 
@@ -177,7 +177,7 @@ watch(
     <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
       <template #title>Settings</template>
 
-      <PlDatasetSubsetSelector
+      <PlDatasetSelector
         v-model="app.model.data.dataset"
         :options="app.model.outputs.datasetOptions"
         label="3D Structure"

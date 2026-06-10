@@ -26,7 +26,7 @@ export const blockDataModel = new DataModelBuilder().from<BlockData>("v1").init(
   customBlockLabel: "",
 
   tmScoreThreshold: 0.95,
-  coverageThreshold: 0.9,
+  coverageThreshold: 0.95,
   clusteringMode: "easy-cluster" as const,
   alignmentType: "full_pdb_aa" as const,
   // Only consulted in cdrh3 mode. Trade-off: small flank keeps the cluster

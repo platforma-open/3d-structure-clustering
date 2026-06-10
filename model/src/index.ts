@@ -22,30 +22,6 @@ import type { AlignmentType, BlockArgs, BlockData, ClusteringMode } from "./type
 export * from "./types";
 export { blockDataModel } from "./dataModel";
 
-// Restrict the filter slot in `PlDatasetSelector` to subsets coming from the
-// 3d-structure-prediction block (typically the `confident` subset). Mirrors
-// 3d-structure-prediction's `hasLeadSelectionTrace` pattern.
-const PREDICTION_TRACE_TYPE = "milaboratories.3d-structure-prediction";
-
-function hasPredictionTrace(annotations: Record<string, string> | undefined): boolean {
-  const raw = annotations?.["pl7.app/trace"];
-  if (!raw) return false;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return (
-      Array.isArray(parsed) &&
-      parsed.some(
-        (e) =>
-          typeof e === "object" &&
-          e !== null &&
-          (e as { type?: unknown }).type === PREDICTION_TRACE_TYPE,
-      )
-    );
-  } catch {
-    return false;
-  }
-}
-
 // `easy-linclust` is not exposed: foldseek's linclust rejects PDB directories
 // and requires a separate `foldseek createdb` chain.
 export const clusteringModeOptions = [
@@ -80,7 +56,7 @@ export const ALIGNMENT_DEFAULTS: Record<
   }
 > = {
   cdrh3: { tmScoreThreshold: 0.7, coverageThreshold: 0.8 },
-  full_pdb_aa: { tmScoreThreshold: 0.95, coverageThreshold: 0.9 },
+  full_pdb_aa: { tmScoreThreshold: 0.95, coverageThreshold: 0.95 },
   full_pdb: { tmScoreThreshold: 0.95, coverageThreshold: 0.9 },
 };
 
@@ -110,33 +86,26 @@ export const platforma = BlockModelV3.create(blockDataModel)
     };
   })
 
-  .output("datasetOptions", (ctx): DatasetOption[] | undefined => {
-    const options = buildDatasetOptions(ctx, {
+  // Labels are intentionally NOT overridden here. `buildDatasetOptions` →
+  // `getOptions` already runs `deriveDistinctLabels`, which disambiguates
+  // same-named PDB datasets by their trace (e.g. which Lead Selection /
+  // prediction block produced them). A hand-rolled chain-based label would
+  // collapse two same-chain datasets to the same string and defeat that.
+  .output("datasetOptions", (ctx): DatasetOption[] | undefined =>
+    buildDatasetOptions(ctx, {
       primary: (spec: PObjectSpec): boolean => {
         if (!isPColumnSpec(spec)) return false;
         if (spec.name !== "pl7.app/structure/pdb") return false;
         const rowAxis = spec.axesSpec?.[0]?.name;
         return rowAxis === "pl7.app/vdj/clonotypeKey" || rowAxis === "pl7.app/vdj/scClonotypeKey";
       },
-      filter: (spec: PObjectSpec): boolean => hasPredictionTrace(spec.annotations),
-    });
-    if (options === undefined) return undefined;
-    return options.map((opt) => {
-      // Primary label override — rename the dropdown entries with chain-aware
-      // suffixes ("3D Structure (IGHeavy)").
-      const primarySpec = ctx.resultPool.getPColumnSpecByRef(opt.primary.ref);
-      const chain =
-        primarySpec !== undefined && isPColumnSpec(primarySpec)
-          ? primarySpec.axesSpec?.[0]?.domain?.["pl7.app/vdj/chain"]
-          : undefined;
-      const primaryLabel = chain ? `3D Structure (${chain})` : "3D Structure";
-
-      return {
-        ...opt,
-        primary: { ...opt.primary, label: primaryLabel },
-      };
-    });
-  })
+      // No subset filter: the PDB map is already confident-only, so the dataset
+      // is picked directly. `() => false` is required — omitting `filter`
+      // defaults to accept-all, which would attach unrelated `isSubset` columns
+      // on the clonotype axis (e.g. Lead Selection's subsets).
+      filter: () => false,
+    }),
+  )
 
   .outputWithStatus("clustersTable", (ctx): PlDataTableModel | undefined => {
     const acc = ctx.outputs?.resolve("clustersTable");
