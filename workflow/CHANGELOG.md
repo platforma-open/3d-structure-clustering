@@ -1,5 +1,16 @@
 # @platforma-open/milaboratories.3d-structure-clustering.workflow
 
+## 1.1.0
+
+### Minor Changes
+
+- 94cb563: Select the 3D structures dataset directly. The upstream 3D Structure Prediction block now exports a confident-only PDB map, so there is no subset to choose: the settings panel uses the standard `PlDatasetSelector` to pick the PDB dataset directly (replacing the subset-only `PlDatasetSubsetSelector`), and the model no longer attaches subset filters (which had begun surfacing unrelated upstream subsets such as Lead Selection's). Removes the now-dead confident-subset filtering machinery (`filter-pdbs` / `build-filtered-pdbs-map` templates and the `filter_pdbs.py` software entrypoint).
+
+### Patch Changes
+
+- Updated dependencies [94cb563]
+  - @platforma-open/milaboratories.3d-structure-clustering.software@1.1.0
+
 ## 1.0.5
 
 ### Patch Changes
