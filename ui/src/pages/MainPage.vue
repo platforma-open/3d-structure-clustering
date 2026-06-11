@@ -9,6 +9,7 @@ import {
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
+  PlDatasetSelector,
   PlDropdown,
   PlLogView,
   PlNumberField,
@@ -23,7 +24,6 @@ import {
   alignmentTypeOptions,
   defaultBlockLabelFor,
 } from "@platforma-open/milaboratories.3d-structure-clustering.model";
-import PlDatasetSubsetSelector from "../components/PlDatasetSubsetSelector.vue";
 
 const app = useApp();
 
@@ -149,8 +149,8 @@ watch(
     </template>
 
     <PlAlert v-if="emptyInput" type="warn">
-      No confident PDB structures available. Verify the upstream block ran successfully and the
-      confidence subset is populated.
+      No confident PDB structures available. Verify the upstream block ran successfully and the PDB
+      dataset is populated.
     </PlAlert>
 
     <PlAlert v-if="singletonAlertVisible" type="info" closable>
@@ -177,7 +177,7 @@ watch(
     <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
       <template #title>Settings</template>
 
-      <PlDatasetSubsetSelector
+      <PlDatasetSelector
         v-model="app.model.data.dataset"
         :options="app.model.outputs.datasetOptions"
         label="3D Structure"

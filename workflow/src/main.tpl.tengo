@@ -14,18 +14,15 @@ text := import("text")
 clusterCols := import(":cluster-cols-conv")
 
 clusteringTpl := assets.importTemplate(":clustering")
-filterPdbsTpl := assets.importTemplate(":filter-pdbs")
 anonymizationTpl := assets.importTemplate(":anonymization")
 deanonimizationTpl := assets.importTemplate(":deanonimization")
 
 wf.prepare(func(args) {
 	bb := wf.createPBundleBuilder()
 	bb.ignoreMissingDomains()
-	// PDB ResourceMap on [clonotypeKey] is the anchor.
+	// PDB ResourceMap on [clonotypeKey] is the anchor. It is already
+	// confident-only upstream, so there is no subset filter to resolve.
 	bb.addAnchor("main", args.dataset.column)
-	if !is_undefined(args.dataset.filter) {
-		bb.addRef(args.dataset.filter)
-	}
 	// `pl7.app/label` on the clonotype axis: process_results.py rewrites the
 	// centroid's `C-` / `P-` prefix to `CL-` for cluster labels.
 	bb.addMulti(
@@ -82,30 +79,11 @@ wf.body(func(args) {
 	abundanceTableBuilder.setAxisHeader(clonotypeAxisName, "clonotypeKey")
 	abundanceTable := abundanceTableBuilder.build()
 
-	// Confident-subset filter: route the PDB ResourceMap through a Python
-	// pre-step that keeps only confident entries. The dedicated template is
-	// needed because the workdir-processor result is a future field reference;
-	// wrapping it lets the SDK await resolution before the clustering body
-	// iterates the map.
-	effectivePdbData := resolvedPdb.data
-	if !is_undefined(args.dataset.filter) {
-		filterCol := columns.getColumn(args.dataset.filter)
-		keysWf := pt.workflow().mem("2GiB").cpu(1)
-		keysDf := keysWf.frame(pt.p.column("filterValue", { spec: filterCol.spec, data: filterCol.data }))
-		keysDf.filter(pt.col("filterValue").eq(pt.lit(1))).
-			select(pt.axis(clonotypeAxisName)).
-			save("confident_keys.tsv")
-		confidentKeysTsv := keysWf.run().getFile("confident_keys.tsv")
-
-		filterResult := render.create(filterPdbsTpl, {
-			pdbData: resolvedPdb.data,
-			confidentKeysTsv: confidentKeysTsv
-		})
-		effectivePdbData = filterResult.output("filteredPdbsMap")
-	}
-
+	// The PDB ResourceMap is already confident-only upstream (the prediction
+	// block writes only confident clonotypes into it), so it feeds clustering
+	// directly — no subset filtering step here.
 	clusteringInputs := {
-		pdbData: effectivePdbData,
+		pdbData: resolvedPdb.data,
 		abundanceTsv: abundanceTable,
 		abundanceUnit: abundanceUnit,
 		abundanceLabel: abundanceLabel,
