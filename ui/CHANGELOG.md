@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.3d-structure-clustering.ui
 
+## 1.1.1
+
+### Patch Changes
+
+- c635aff: Migrate block onto the structurer (block-tools 2.11.0) — full SDK upgrade: model/ui-vue/test 1.79.14, workflow-tengo 6.6.3, tengo-builder 4.0.8, ts-builder 1.5.2. Adopts the canonical tool-managed layout (oxlint/oxfmt across model/ui/test, tsconfig, turbo, block index, scaffold-owned CI workflows, managed package.json + catalog).
+- Updated dependencies [c635aff]
+  - @platforma-open/milaboratories.3d-structure-clustering.model@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes
