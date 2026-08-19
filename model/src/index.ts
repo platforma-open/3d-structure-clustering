@@ -20,7 +20,30 @@ import { blockDataModel } from "./dataModel";
 import type { AlignmentType, BlockArgs, BlockData, ClusteringMode } from "./types";
 
 export * from "./types";
+
 export { blockDataModel } from "./dataModel";
+
+/**
+ * Whether a PDB dataset's row axis identifies antibody records this block can cluster.
+ *
+ * The axis is inherited from whatever 3D Structure Prediction was pointed at, so it is
+ * `pl7.app/vdj/clonotypeKey`, `pl7.app/vdj/scClonotypeKey`, or — for import-vdj-data's bare
+ * antibody sets — the shared `pl7.app/variantKey`. That last axis is shared with
+ * peptide-extraction (`pl7.app/peptide/extractionRunId`) and synthetic-repertoire-profiler
+ * (`pl7.app/repertoire/extractionRunId`), so the run-id key in the axis domain is what admits
+ * receptor sets without admitting the other two. Kept identical to the test in
+ * 3d-structure-prediction, which decides what can produce these structures in the first place.
+ */
+function isClusterableRowAxis(axis: AxisSpec | undefined): boolean {
+  if (axis === undefined) return false;
+  if (axis.name === "pl7.app/vdj/clonotypeKey" || axis.name === "pl7.app/vdj/scClonotypeKey") {
+    return true;
+  }
+  return (
+    axis.name === "pl7.app/variantKey" &&
+    axis.domain?.["pl7.app/vdj/clonotypingRunId"] !== undefined
+  );
+}
 
 // `easy-linclust` is not exposed: foldseek's linclust rejects PDB directories
 // and requires a separate `foldseek createdb` chain.
@@ -96,8 +119,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
       primary: (spec: PObjectSpec): boolean => {
         if (!isPColumnSpec(spec)) return false;
         if (spec.name !== "pl7.app/structure/pdb") return false;
-        const rowAxis = spec.axesSpec?.[0]?.name;
-        return rowAxis === "pl7.app/vdj/clonotypeKey" || rowAxis === "pl7.app/vdj/scClonotypeKey";
+        return isClusterableRowAxis(spec.axesSpec?.[0]);
       },
       // No subset filter: the PDB map is already confident-only, so the dataset
       // is picked directly. `() => false` is required — omitting `filter`
