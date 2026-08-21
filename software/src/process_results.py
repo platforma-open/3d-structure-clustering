@@ -43,16 +43,30 @@ import pandas as pd
 from tmtools import tm_align
 from tmtools.io import get_residue_data, get_structure
 
-# Upstream `pl7.app/label` values carry `C-` (MiXCR) or `P-` (peptide) prefix;
-# rewrite to `CL-` so cluster labels mirror clonotype-clustering.
+# A cluster is labelled from its representative record's label. `C-` (MiXCR) and `P-` (peptide)
+# prefixes are rewritten to `CL-`; a label carrying neither gets `CL-` prepended instead.
+#
+# Prepending is what an imported set needs: its labels are the scientist's own identifiers —
+# `AB-001`, `trastuzumab` — so nothing was rewritten and the cluster appeared under a bare record
+# name, reading as a record rather than a cluster. Prepending keeps the representative's identity
+# visible, which a generated index would lose.
+#
+# Mirrors clonotype-clustering's process_results.py, deliberately: the two blocks label clusters
+# from the same upstream `pl7.app/label` column and a scientist sees both in one project.
 _CLUSTER_LABEL_PREFIX_RE = re.compile(r"^[CP]-")
 
 
 def cluster_label_from(centroid_clonotype_key: str, key_to_label: dict[str, str]) -> str:
     raw = key_to_label.get(centroid_clonotype_key) or ""
     if not raw:
+        # No upstream label at all. Left as the bare key rather than `CL-<hash>`: the hash is not
+        # a readable name, and prefixing it would dress a degraded fallback up as a real label.
         return centroid_clonotype_key
-    return _CLUSTER_LABEL_PREFIX_RE.sub("CL-", raw)
+    if raw.startswith("CL-"):
+        return raw
+    if _CLUSTER_LABEL_PREFIX_RE.match(raw):
+        return _CLUSTER_LABEL_PREFIX_RE.sub("CL-", raw)
+    return "CL-" + raw
 
 
 def list_pdb_chain_ids(path: str) -> list[str]:
