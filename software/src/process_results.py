@@ -62,8 +62,6 @@ def cluster_label_from(centroid_clonotype_key: str, key_to_label: dict[str, str]
         # No upstream label at all. Left as the bare key rather than `CL-<hash>`: the hash is not
         # a readable name, and prefixing it would dress a degraded fallback up as a real label.
         return centroid_clonotype_key
-    if raw.startswith("CL-"):
-        return raw
     if _CLUSTER_LABEL_PREFIX_RE.match(raw):
         return _CLUSTER_LABEL_PREFIX_RE.sub("CL-", raw)
     return "CL-" + raw
