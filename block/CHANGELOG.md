@@ -1,5 +1,79 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.2.0
+
+### Minor Changes
+
+- 2c7c718: Accept PDB datasets keyed on `pl7.app/variantKey`
+
+  The dataset selector required the PDB map's row axis to be `pl7.app/vdj/clonotypeKey` or
+  `pl7.app/vdj/scClonotypeKey`. That axis is inherited from whatever 3D Structure Prediction was
+  pointed at, and prediction now accepts `import-vdj-data`'s bare antibody sets on
+  `pl7.app/variantKey` — so their structures existed but could not be selected here.
+
+  `pl7.app/variantKey` is shared with peptide-extraction and synthetic-repertoire-profiler, so
+  the admission test reads `pl7.app/vdj/clonotypingRunId` from the axis domain rather than
+  trusting the axis name. It is deliberately identical to `isFoldableRowAxis` in
+  3d-structure-prediction.
+
+  No workflow change: `clonotypeAxisSpec` is already read off the input PDB spec, and the
+  required primary abundance resolves through an anchored selector.
+
+  Note for imported sets: their abundance is the synthetic per-record constant that
+  `import-vdj-data` emits, so per-cluster abundance counts records rather than molecules.
+
+### Patch Changes
+
+- 652701b: Prefix cluster labels that carry no recognised record prefix
+
+  A cluster is labelled from its representative record's label, with a leading `C-` (MiXCR) or `P-`
+  (peptide) rewritten to `CL-`. An imported set's labels are the scientist's own identifiers —
+  `AB-001`, `trastuzumab` — so nothing was rewritten and the cluster appeared under a bare record
+  name, reading as a record rather than a cluster.
+
+  Such labels now get `CL-` prepended: `AB-001` becomes `CL-AB-001`. MiXCR and peptide labels are
+  unchanged.
+
+  A label already shaped like `CL-01` is prepended too, giving `CL-CL-01`. An imported set's labels
+  are arbitrary, so `CL-01` is a record the scientist named that way; leaving it alone would show a
+  cluster and a record under one identical string — the confusion this change exists to remove.
+
+  The same change clonotype-clustering made, applied here deliberately rather than incidentally:
+  both blocks label clusters from the same upstream `pl7.app/label` column, and a scientist can see
+  both in one project, so the two must agree.
+
+  `synthetic-repertoire-profiler` labels variants `V-XXXXX`, which the rewrite did not match either,
+  so amplicon clusters were also showing a bare record label and now read `CL-V-XXXXX`. Adding `V`
+  to the rewrite instead would give `CL-XXXXX` and match MiXCR and peptide, but that changes labels
+  for an existing modality and is left to whoever owns that call — as in clonotype-clustering.
+
+  A cluster whose representative has no upstream label at all still falls back to the bare centroid
+  key. That path is unchanged: the key is a hash, and prefixing it would present a degraded
+  fallback as a real label.
+
+- c1f3988: Pass `--registry-serve-url` when publishing the block
+
+  `block-tools` made `--registry-serve-url` a required option for `publish`, and the facade's
+  `prepublishOnly` predates that. With block-tools moving from 2.11.0 to 2.14.3 on this branch, the
+  release would have failed the way 3d-structure-prediction's already did:
+
+  ```
+  error: required option '--registry-serve-url <url>' not specified
+  ```
+
+  The component packages publish to npm before the facade runs, so the failure leaves the block
+  itself unpublished at a version whose parts are already out. Fixed before that happens rather
+  than after.
+
+  The redundant `block-tools pack &&` prefix goes with it: `build` already runs
+  `shx rm -rf ./block-pack && block-tools pack`, and CI publishes with `build-script-name: 'build'`.
+
+- Updated dependencies [2c7c718]
+- Updated dependencies [652701b]
+  - @platforma-open/milaboratories.3d-structure-clustering.model@1.2.0
+  - @platforma-open/milaboratories.3d-structure-clustering.workflow@1.1.2
+  - @platforma-open/milaboratories.3d-structure-clustering.ui@1.1.2
+
 ## 1.1.1
 
 ### Patch Changes
