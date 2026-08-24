@@ -23,8 +23,9 @@ wf.prepare(func(args) {
 	// PDB ResourceMap on [clonotypeKey] is the anchor. It is already
 	// confident-only upstream, so there is no subset filter to resolve.
 	bb.addAnchor("main", args.dataset.column)
-	// `pl7.app/label` on the clonotype axis: process_results.py rewrites the
-	// centroid's `C-` / `P-` prefix to `CL-` for cluster labels.
+	// `pl7.app/label` on the record axis: process_results.py turns the centroid's label into the
+	// cluster's — rewriting a leading `C-` / `P-` to `CL-`, and prepending `CL-` to a label
+	// carrying neither (an imported set's labels are the scientist's own identifiers).
 	bb.addMulti(
 		{ axes: [{ anchor: "main", idx: 0 }], name: "pl7.app/label" },
 		"clonotypeKeyLabels")
