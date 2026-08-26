@@ -8,14 +8,15 @@ import type {
   PObjectSpec,
 } from "@platforma-sdk/model";
 import {
+  AccessorColumnsProvider,
   BlockModelV3,
   buildDatasetOptions,
   createPFrameForGraphs,
   createPlDataTableV3,
   isPColumnSpec,
-  OutputColumnProvider,
   parseResourceMap,
 } from "@platforma-sdk/model";
+import { kind } from "@platforma-open/milaboratories.3d-structure-clustering.kind";
 import { blockDataModel } from "./dataModel";
 import type { AlignmentType, BlockArgs, BlockData, ClusteringMode } from "./types";
 
@@ -91,7 +92,24 @@ export function defaultBlockLabelFor(args: Partial<BlockData>): string {
   return parts.join(", ");
 }
 
-export const platforma = BlockModelV3.create(blockDataModel)
+export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind })
+
+  /**
+   * The init-params projection — the inverse of `init` in `dataModel.ts`. It
+   * names exactly the fields the kind's `BlockParams` declares, so exporting a
+   * block to a template and applying that template round-trips.
+   *
+   * `dataset` is absent on purpose: it is an anchor-bound selection, meaningless
+   * in another project. `cpu` and `mem` describe the machine a run gets, not the
+   * analysis. `customBlockLabel` and the view state are not configuration.
+   */
+  .templateParams((data) => ({
+    clusteringMode: data.clusteringMode,
+    alignmentType: data.alignmentType,
+    tmScoreThreshold: data.tmScoreThreshold,
+    coverageThreshold: data.coverageThreshold,
+    cdrh3FlankResidues: data.cdrh3FlankResidues,
+  }))
 
   .args<BlockArgs>((data) => {
     if (data.dataset === undefined) throw new Error("Select a dataset");
@@ -132,16 +150,20 @@ export const platforma = BlockModelV3.create(blockDataModel)
   .outputWithStatus("clustersTable", (ctx): PlDataTableModel | undefined => {
     const acc = ctx.outputs?.resolve("clustersTable");
     if (acc === undefined) return undefined;
-    const snapshots = new OutputColumnProvider(acc).getAllColumns();
-    if (snapshots.length === 0) return undefined;
+    // `AccessorColumnsProvider` is a memoised factory keyed on the accessor
+    // root, not a constructor — calling it again with the same `acc` returns
+    // the same instance, so building it once and reusing it is free either way.
+    const provider = AccessorColumnsProvider(acc);
+    const columns = provider.getColumns();
+    if (columns.length === 0) return undefined;
 
     // Anchor on a per-cluster PColumn so the table is keyed by [clusterId]
     // and V3's discovery surfaces the `pl7.app/label` column as the
     // axis-value substitution. maxHops:0 keeps per-clonotype columns out of
     // the per-cluster table.
-    const anchorSpec = snapshots.find(
-      (s) => s.spec.name === "pl7.app/structure/clustering/clusterSize",
-    )?.spec;
+    const anchorSpec = columns
+      .find((c) => c.getSpec().name === "pl7.app/structure/clustering/clusterSize")
+      ?.getSpec();
     if (anchorSpec === undefined) return undefined;
 
     // Hide the L centroid sequence column on heavy-only datasets — the
@@ -153,7 +175,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
 
     return createPlDataTableV3(ctx, {
       columns: {
-        sources: [new OutputColumnProvider(acc)],
+        sources: [provider],
         anchors: { main: anchorSpec },
         selector: { mode: "enrichment", maxHops: 0 },
       },
@@ -163,9 +185,13 @@ export const platforma = BlockModelV3.create(blockDataModel)
         : {
             visibility: [
               {
-                match: (spec) =>
-                  spec.name === "pl7.app/structure/centroidSequence" &&
-                  spec.domain?.["pl7.app/structure/chain"] === "L",
+                // `match` is a declarative `ColumnSelector` now, not a
+                // predicate — `name` takes a plain string and `domain` a
+                // record of them.
+                match: {
+                  name: "pl7.app/structure/centroidSequence",
+                  domain: { "pl7.app/structure/chain": "L" },
+                },
                 visibility: "hidden",
               },
             ],

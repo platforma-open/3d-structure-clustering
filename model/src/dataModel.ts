@@ -1,3 +1,4 @@
+import { kind } from "@platforma-open/milaboratories.3d-structure-clustering.kind";
 import { createPlDataTableStateV2, DataModelBuilder } from "@platforma-sdk/model";
 import type { BlockData } from "./types";
 
@@ -22,24 +23,30 @@ const initialBubbleState = () =>
     axesSettings: {},
   }) satisfies import("@milaboratories/graph-maker").GraphMakerState;
 
-export const blockDataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
-  customBlockLabel: "",
+export const blockDataModel = new DataModelBuilder({ kind })
+  .from<BlockData>("v1")
+  // `params` carries the kind's init-params contract, and is undefined whenever
+  // a block is created outside a template. So every field it can seed keeps its
+  // default behind a `??`. The seedable set is exactly what `.templateParams`
+  // projects back in `index.ts` — the two are inverses.
+  .init(({ params }) => ({
+    customBlockLabel: "",
 
-  tmScoreThreshold: 0.95,
-  coverageThreshold: 0.95,
-  clusteringMode: "easy-cluster" as const,
-  alignmentType: "full_pdb_aa" as const,
-  // Only consulted in cdrh3 mode. Trade-off: small flank keeps the cluster
-  // signal CDR-focused but starves TM-score's length-dependent d0; large
-  // flank pulls in highly-conserved FR3-end + FR4 residues and re-introduces
-  // the framework-dominated "one huge cluster" symptom. flank=5 puts
-  // fragments at ~23 aa (d0 ≈ 0.7 Å) — still loop-dominated but long enough
-  // for TM-scoring to discriminate, with FoldSeek's k-mer prefilter able to
-  // find candidate pairs.
-  cdrh3FlankResidues: 5,
+    tmScoreThreshold: params?.tmScoreThreshold ?? 0.95,
+    coverageThreshold: params?.coverageThreshold ?? 0.95,
+    clusteringMode: params?.clusteringMode ?? ("easy-cluster" as const),
+    alignmentType: params?.alignmentType ?? ("full_pdb_aa" as const),
+    // Only consulted in cdrh3 mode. Trade-off: small flank keeps the cluster
+    // signal CDR-focused but starves TM-score's length-dependent d0; large
+    // flank pulls in highly-conserved FR3-end + FR4 residues and re-introduces
+    // the framework-dominated "one huge cluster" symptom. flank=5 puts
+    // fragments at ~23 aa (d0 ≈ 0.7 Å) — still loop-dominated but long enough
+    // for TM-scoring to discriminate, with FoldSeek's k-mer prefilter able to
+    // find candidate pairs.
+    cdrh3FlankResidues: params?.cdrh3FlankResidues ?? 5,
 
-  tableState: createPlDataTableStateV2(),
-  graphStateBubble: initialBubbleState(),
-  graphStateHistogram: initialGraphState("Cluster size distribution", "#7da3d1"),
-  alignmentModel: {},
-}));
+    tableState: createPlDataTableStateV2(),
+    graphStateBubble: initialBubbleState(),
+    graphStateHistogram: initialGraphState("Cluster size distribution", "#7da3d1"),
+    alignmentModel: {},
+  }));

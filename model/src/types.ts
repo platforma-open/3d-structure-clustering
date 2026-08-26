@@ -1,21 +1,22 @@
 import type { GraphMakerState } from "@milaboratories/graph-maker";
 import type {
+  AlignmentType,
+  ClusteringMode,
+} from "@platforma-open/milaboratories.3d-structure-clustering.kind";
+import type {
   DatasetSelection,
   PlDataTableStateV2,
   PlMultiSequenceAlignmentModel,
   PrimaryRef,
 } from "@platforma-sdk/model";
 
-export type ClusteringMode = "easy-cluster" | "easy-linclust";
-
-// What FoldSeek scores against:
-//  - cdrh3:       pre-slice each PDB to CDR-H3 (REMARK 99 PLATFORMA CDRH3),
-//                 then cluster on those fragments — paratope-focused.
-//  - full_pdb_aa: full Fv, FoldSeek `--alignment-type 2` (3Di + AA combined) —
-//                 inflates similarity when framework AA is conserved.
-//  - full_pdb:    full Fv, FoldSeek `--alignment-type 1` (TM-align, backbone
-//                 only) — pure structural score.
-export type AlignmentType = "cdrh3" | "full_pdb_aa" | "full_pdb";
+/**
+ * The two setting vocabularies live in the kind, not here. They are part of the
+ * block's init-params contract, and the kind cannot import the model — the
+ * dependency runs model → kind. Re-exported so every existing consumer keeps
+ * working.
+ */
+export type { AlignmentType, ClusteringMode };
 
 export type BlockArgs = {
   customBlockLabel: string;
