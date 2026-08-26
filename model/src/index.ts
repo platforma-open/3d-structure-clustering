@@ -25,25 +25,50 @@ export * from "./types";
 export { blockDataModel } from "./dataModel";
 
 /**
+ * A synthetic-repertoire-profiler row axis holding a clusterable V domain.
+ *
+ * The profiler declares what its run produced instead of leaving consumers to
+ * guess: `pl7.app/modality` is `vdj` for a V-domain repertoire and `amplicon`
+ * for a designed library, phage pool or deep mutational scan. Only `vdj` runs
+ * reach a structure predictor, so only they can arrive here as PDBs.
+ *
+ * The alphabet mark is kept for the same reason 3D Structure Prediction keeps
+ * it: one profiler run emits an nt-keyed and an aa-keyed dataset, and only the
+ * aa-keyed one is foldable. An nt-keyed PDB dataset therefore cannot exist, and
+ * the two gates stay word-for-word comparable.
+ */
+function isProfilerVdjRowAxis(axis: AxisSpec | undefined): boolean {
+  return (
+    axis?.name === "pl7.app/variantKey" &&
+    axis.domain?.["pl7.app/modality"] === "vdj" &&
+    axis.domain?.["pl7.app/alphabet"] === "aminoacid"
+  );
+}
+
+/**
  * Whether a PDB dataset's row axis identifies antibody records this block can cluster.
  *
  * The axis is inherited from whatever 3D Structure Prediction was pointed at, so it is
- * `pl7.app/vdj/clonotypeKey`, `pl7.app/vdj/scClonotypeKey`, or — for import-vdj-data's bare
- * antibody sets — the shared `pl7.app/variantKey`. That last axis is shared with
- * peptide-extraction (`pl7.app/peptide/extractionRunId`) and synthetic-repertoire-profiler
- * (`pl7.app/repertoire/extractionRunId`), so the run-id key in the axis domain is what admits
- * receptor sets without admitting the other two. Kept identical to the test in
- * 3d-structure-prediction, which decides what can produce these structures in the first place.
+ * `pl7.app/vdj/clonotypeKey`, `pl7.app/vdj/scClonotypeKey`, or the shared
+ * `pl7.app/variantKey`. The axis name alone says nothing about what the rows are, because
+ * three producers key on `variantKey`. Two marks in the axis domain pick out the ones that
+ * hold receptor records:
+ *
+ *  - `pl7.app/vdj/clonotypingRunId` — import-vdj-data's bare antibody sets.
+ *  - `pl7.app/modality: vdj` — synthetic-repertoire-profiler's own declaration
+ *    (see `isProfilerVdjRowAxis`).
+ *
+ * peptide-extraction stamps `pl7.app/peptide/extractionRunId` and neither mark, so it stays
+ * out. Kept identical to the test in 3d-structure-prediction, which decides what can produce
+ * these structures in the first place.
  */
 function isClusterableRowAxis(axis: AxisSpec | undefined): boolean {
   if (axis === undefined) return false;
   if (axis.name === "pl7.app/vdj/clonotypeKey" || axis.name === "pl7.app/vdj/scClonotypeKey") {
     return true;
   }
-  return (
-    axis.name === "pl7.app/variantKey" &&
-    axis.domain?.["pl7.app/vdj/clonotypingRunId"] !== undefined
-  );
+  if (axis.name !== "pl7.app/variantKey") return false;
+  return axis.domain?.["pl7.app/vdj/clonotypingRunId"] !== undefined || isProfilerVdjRowAxis(axis);
 }
 
 // `easy-linclust` is not exposed: foldseek's linclust rejects PDB directories
