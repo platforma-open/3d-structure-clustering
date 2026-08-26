@@ -1,6 +1,6 @@
 ---
-'@platforma-open/milaboratories.3d-structure-clustering.model': minor
-'@platforma-open/milaboratories.3d-structure-clustering': minor
+'@platforma-open/milaboratories.3d-structure-clustering.model': patch
+'@platforma-open/milaboratories.3d-structure-clustering': patch
 ---
 
 Accept structures predicted from synthetic-repertoire-profiler VDJ datasets
