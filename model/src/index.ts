@@ -8,14 +8,15 @@ import type {
   PObjectSpec,
 } from "@platforma-sdk/model";
 import {
+  AccessorColumnsProvider,
   BlockModelV3,
   buildDatasetOptions,
   createPFrameForGraphs,
   createPlDataTableV3,
   isPColumnSpec,
-  OutputColumnProvider,
   parseResourceMap,
 } from "@platforma-sdk/model";
+import { kind } from "@platforma-open/milaboratories.3d-structure-clustering.kind";
 import { blockDataModel } from "./dataModel";
 import type { AlignmentType, BlockArgs, BlockData, ClusteringMode } from "./types";
 
@@ -24,25 +25,50 @@ export * from "./types";
 export { blockDataModel } from "./dataModel";
 
 /**
+ * A synthetic-repertoire-profiler row axis holding a clusterable V domain.
+ *
+ * The profiler declares what its run produced instead of leaving consumers to
+ * guess: `pl7.app/modality` is `vdj` for a V-domain repertoire and `amplicon`
+ * for a designed library, phage pool or deep mutational scan. Only `vdj` runs
+ * reach a structure predictor, so only they can arrive here as PDBs.
+ *
+ * The alphabet mark is kept for the same reason 3D Structure Prediction keeps
+ * it: one profiler run emits an nt-keyed and an aa-keyed dataset, and only the
+ * aa-keyed one is foldable. An nt-keyed PDB dataset therefore cannot exist, and
+ * the two gates stay word-for-word comparable.
+ */
+function isProfilerVdjRowAxis(axis: AxisSpec | undefined): boolean {
+  return (
+    axis?.name === "pl7.app/variantKey" &&
+    axis.domain?.["pl7.app/modality"] === "vdj" &&
+    axis.domain?.["pl7.app/alphabet"] === "aminoacid"
+  );
+}
+
+/**
  * Whether a PDB dataset's row axis identifies antibody records this block can cluster.
  *
  * The axis is inherited from whatever 3D Structure Prediction was pointed at, so it is
- * `pl7.app/vdj/clonotypeKey`, `pl7.app/vdj/scClonotypeKey`, or — for import-vdj-data's bare
- * antibody sets — the shared `pl7.app/variantKey`. That last axis is shared with
- * peptide-extraction (`pl7.app/peptide/extractionRunId`) and synthetic-repertoire-profiler
- * (`pl7.app/repertoire/extractionRunId`), so the run-id key in the axis domain is what admits
- * receptor sets without admitting the other two. Kept identical to the test in
- * 3d-structure-prediction, which decides what can produce these structures in the first place.
+ * `pl7.app/vdj/clonotypeKey`, `pl7.app/vdj/scClonotypeKey`, or the shared
+ * `pl7.app/variantKey`. The axis name alone says nothing about what the rows are, because
+ * three producers key on `variantKey`. Two marks in the axis domain pick out the ones that
+ * hold receptor records:
+ *
+ *  - `pl7.app/vdj/clonotypingRunId` — import-vdj-data's bare antibody sets.
+ *  - `pl7.app/modality: vdj` — synthetic-repertoire-profiler's own declaration
+ *    (see `isProfilerVdjRowAxis`).
+ *
+ * peptide-extraction stamps `pl7.app/peptide/extractionRunId` and neither mark, so it stays
+ * out. Kept identical to the test in 3d-structure-prediction, which decides what can produce
+ * these structures in the first place.
  */
 function isClusterableRowAxis(axis: AxisSpec | undefined): boolean {
   if (axis === undefined) return false;
   if (axis.name === "pl7.app/vdj/clonotypeKey" || axis.name === "pl7.app/vdj/scClonotypeKey") {
     return true;
   }
-  return (
-    axis.name === "pl7.app/variantKey" &&
-    axis.domain?.["pl7.app/vdj/clonotypingRunId"] !== undefined
-  );
+  if (axis.name !== "pl7.app/variantKey") return false;
+  return axis.domain?.["pl7.app/vdj/clonotypingRunId"] !== undefined || isProfilerVdjRowAxis(axis);
 }
 
 // `easy-linclust` is not exposed: foldseek's linclust rejects PDB directories
@@ -91,7 +117,24 @@ export function defaultBlockLabelFor(args: Partial<BlockData>): string {
   return parts.join(", ");
 }
 
-export const platforma = BlockModelV3.create(blockDataModel)
+export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind })
+
+  /**
+   * The init-params projection — the inverse of `init` in `dataModel.ts`. It
+   * names exactly the fields the kind's `BlockParams` declares, so exporting a
+   * block to a template and applying that template round-trips.
+   *
+   * `dataset` is absent on purpose: it is an anchor-bound selection, meaningless
+   * in another project. `cpu` and `mem` describe the machine a run gets, not the
+   * analysis. `customBlockLabel` and the view state are not configuration.
+   */
+  .templateParams((data) => ({
+    clusteringMode: data.clusteringMode,
+    alignmentType: data.alignmentType,
+    tmScoreThreshold: data.tmScoreThreshold,
+    coverageThreshold: data.coverageThreshold,
+    cdrh3FlankResidues: data.cdrh3FlankResidues,
+  }))
 
   .args<BlockArgs>((data) => {
     if (data.dataset === undefined) throw new Error("Select a dataset");
@@ -132,16 +175,20 @@ export const platforma = BlockModelV3.create(blockDataModel)
   .outputWithStatus("clustersTable", (ctx): PlDataTableModel | undefined => {
     const acc = ctx.outputs?.resolve("clustersTable");
     if (acc === undefined) return undefined;
-    const snapshots = new OutputColumnProvider(acc).getAllColumns();
-    if (snapshots.length === 0) return undefined;
+    // `AccessorColumnsProvider` is a memoised factory keyed on the accessor
+    // root, not a constructor — calling it again with the same `acc` returns
+    // the same instance, so building it once and reusing it is free either way.
+    const provider = AccessorColumnsProvider(acc);
+    const columns = provider.getColumns();
+    if (columns.length === 0) return undefined;
 
     // Anchor on a per-cluster PColumn so the table is keyed by [clusterId]
     // and V3's discovery surfaces the `pl7.app/label` column as the
     // axis-value substitution. maxHops:0 keeps per-clonotype columns out of
     // the per-cluster table.
-    const anchorSpec = snapshots.find(
-      (s) => s.spec.name === "pl7.app/structure/clustering/clusterSize",
-    )?.spec;
+    const anchorSpec = columns
+      .find((c) => c.getSpec().name === "pl7.app/structure/clustering/clusterSize")
+      ?.getSpec();
     if (anchorSpec === undefined) return undefined;
 
     // Hide the L centroid sequence column on heavy-only datasets — the
@@ -153,7 +200,7 @@ export const platforma = BlockModelV3.create(blockDataModel)
 
     return createPlDataTableV3(ctx, {
       columns: {
-        sources: [new OutputColumnProvider(acc)],
+        sources: [provider],
         anchors: { main: anchorSpec },
         selector: { mode: "enrichment", maxHops: 0 },
       },
@@ -163,9 +210,13 @@ export const platforma = BlockModelV3.create(blockDataModel)
         : {
             visibility: [
               {
-                match: (spec) =>
-                  spec.name === "pl7.app/structure/centroidSequence" &&
-                  spec.domain?.["pl7.app/structure/chain"] === "L",
+                // `match` is a declarative `ColumnSelector` now, not a
+                // predicate — `name` takes a plain string and `domain` a
+                // record of them.
+                match: {
+                  name: "pl7.app/structure/centroidSequence",
+                  domain: { "pl7.app/structure/chain": "L" },
+                },
                 visibility: "hidden",
               },
             ],
