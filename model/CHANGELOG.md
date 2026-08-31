@@ -1,5 +1,75 @@
 # @platforma-open/milaboratories.3d-structure-clustering.model
 
+## 1.2.1
+
+### Patch Changes
+
+- fbd79e3: Accept structures predicted from synthetic-repertoire-profiler VDJ datasets
+
+  The dataset picker now admits a `pl7.app/variantKey` row axis that declares
+  `pl7.app/modality: vdj`, alongside the existing import-vdj-data sets. This
+  mirrors the gate 3D Structure Prediction opened in the same round — the PDB
+  column inherits its row axis from whatever that block was pointed at, so the two
+  tests stay identical by design.
+
+  Nothing else in the block needed changing, and that is worth recording. The gate
+  was its only `pl7.app/vdj/*` dependency:
+
+  - The primary abundance is discovered by annotation, not by name. A profiler run
+    emits `pl7.app/readCount` on `[sampleId, variantKey]` with
+    `pl7.app/abundance/isPrimary` set and `normalized` false, which is exactly what
+    the workflow's selector asks for. The abundance unit already reads "reads"
+    unless the column name says molecules.
+  - Row labels come from `pl7.app/label` on the record axis. The profiler emits one
+    ("Variant Id"), and the existing label rule prepends `CL-` to a label carrying
+    no `C-` / `P-` prefix.
+  - CDR-H3 slicing keeps working. The `REMARK 99 PLATFORMA CDRH3` record is written
+    by 3D Structure Prediction from ANARCI numbering of the sequence itself, not
+    from any upstream VDJ feature column.
+  - A profiler run frames variants against one parent and carries no chain key, so
+    it folds in NanoBodyBuilder2 mode and yields heavy-only structures. The
+    workflow already derives `hasLightChain` from the PDB contents, so the MSA
+    viewer drops the empty L track on its own.
+
+- a7329d2: Migrate to the latest block template and add the mandatory kind package
+
+  Refreshed onto block-tools 2.14.3 via `upgrade-sdk`, and added the `kind/`
+  package every block must now declare. The kind carries the block's identity
+  (`{name}@{version}`, read from its own `package.json`) and its init-params
+  contract.
+
+  `BlockParams` is the five settings that change what the clustering produces:
+  `clusteringMode`, `alignmentType`, `tmScoreThreshold`, `coverageThreshold` and
+  `cdrh3FlankResidues`. All are optional, so a project template can seed any
+  subset and the model's `init` keeps a default behind each. `.templateParams`
+  projects the same five back, so export and apply are inverses. `dataset` is
+  excluded by construction — it is an anchor-bound selection that cannot travel
+  between projects. `cpu` and `mem` are excluded because they describe the machine
+  a run gets, not the analysis. The two setting vocabularies moved from
+  `model/src/types.ts` into the kind, which owns them; the model re-exports them so
+  every consumer keeps working.
+
+  Author-code fixes the upgrade required:
+
+  - `OutputColumnProvider` is gone from `@platforma-sdk/model`. The clusters table
+    now uses `AccessorColumnsProvider` (a memoised factory, not a constructor) and
+    `getColumns()` / `getSpec()`.
+  - `ColumnVisibilityRule.match` is a declarative `ColumnSelector` now, not a
+    predicate. The rule that hides the L centroid sequence on heavy-only datasets
+    became `{ name, domain }`.
+  - The test used the facade's old `blockSpec` export, which the slim facade
+    replaced with a from-pack-v2 `BlockPointer`.
+  - `@platforma-sdk/ui-vue` is on 1.83.3, which publishes the
+    `dist/components/*.vue.d.ts` its own `lib.d.ts` re-exports again. 1.83.1 had
+    dropped them, and the slim facade inlines the model's whole public type
+    surface, so `BlockData`'s `GraphMakerState` reached those missing files
+    through graph-maker and the facade build failed.
+  - The model declares `@platforma-sdk/ui-vue` directly so graph-maker's peer
+    resolves to the catalog version instead of floating to the newest published
+    one.
+
+  The software package moves from `pl-pkg` to `block-tools software build`.
+
 ## 1.2.0
 
 ### Minor Changes
