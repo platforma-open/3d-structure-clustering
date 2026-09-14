@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.2.2
+
+### Patch Changes
+
+- f737b0e: Update SDK and MSA
+
 ## 1.2.1
 
 ### Patch Changes
