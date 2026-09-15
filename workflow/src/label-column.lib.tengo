@@ -1,0 +1,43 @@
+// Selects one `pl7.app/label` column for an axis when the result pool holds several.
+// A downstream block that re-exports a label column adds one step to the source trace.
+// The column with the fewest `pl7.app/trace` steps is the source column.
+// Ties resolve on the bundle key.
+
+ll := import("@platforma-sdk/workflow-tengo:ll")
+json := import("json")
+
+// Returns the number of steps in the `pl7.app/trace` annotation of a spec.
+// Returns 0 when the annotation is absent.
+traceSteps := func(spec) {
+	if is_undefined(spec) || is_undefined(spec.annotations) {
+		return 0
+	}
+	raw := spec.annotations["pl7.app/trace"]
+	if !is_string(raw) || raw == "" {
+		return 0
+	}
+	trace := json.decode(raw)
+	return is_array(trace) ? len(trace) : 0
+}
+
+// Returns the bundle entry ({key, spec, data}) with the fewest trace steps.
+// Returns undefined for an empty list. The result does not depend on the input order.
+selectUpstreamLabelColumn := func(labelColumns) {
+	ll.assert(is_array(labelColumns), "selectUpstreamLabelColumn: expected an array, got %v", labelColumns)
+	best := undefined
+	bestSteps := 0
+	for col in labelColumns {
+		steps := traceSteps(col.spec)
+		if is_undefined(best) || steps < bestSteps ||
+			(steps == bestSteps && string(col.key) < string(best.key)) {
+			best = col
+			bestSteps = steps
+		}
+	}
+	return best
+}
+
+export {
+	traceSteps: traceSteps,
+	selectUpstreamLabelColumn: selectUpstreamLabelColumn
+}

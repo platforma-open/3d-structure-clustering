@@ -1,0 +1,66 @@
+// Unit tests for label-column.lib.tengo. They need no backend.
+// Run: pnpm exec pl-tengo test
+test := import("@platforma-sdk/workflow-tengo:test")
+json := import("json")
+
+labelColumn := import(":label-column")
+
+_axis := { name: "pl7.app/vdj/clonotypeKey", type: "String" }
+
+_col := func(key, trace) {
+	annotations := { "pl7.app/label": "Clone Id" }
+	if !is_undefined(trace) {
+		annotations["pl7.app/trace"] = string(json.encode(trace))
+	}
+	return {
+		key: key,
+		spec: { name: "pl7.app/label", valueType: "String", axesSpec: [_axis], annotations: annotations },
+		data: key + "-data"
+	}
+}
+
+_mixcrTrace := [{ type: "milaboratories.mixcr-clonotyping", id: "b1", importance: 30, label: "MiXCR" }]
+_echoTrace := [
+	{ type: "milaboratories.mixcr-clonotyping", id: "b1", importance: 30, label: "MiXCR" },
+	{ type: "milaboratories.3d-structure-prediction", id: "b2", importance: 20, label: "Prediction" }
+]
+
+TestSelectUpstream_EchoListedFirst := func() {
+	picked := labelColumn.selectUpstreamLabelColumn([
+		_col("labels.echo", _echoTrace),
+		_col("labels.mixcr", _mixcrTrace)
+	])
+	test.isEqual("labels.mixcr", picked.key, "the column with the fewest trace steps wins regardless of pool order")
+}
+
+TestSelectUpstream_OriginalListedFirst := func() {
+	picked := labelColumn.selectUpstreamLabelColumn([
+		_col("labels.mixcr", _mixcrTrace),
+		_col("labels.echo", _echoTrace)
+	])
+	test.isEqual("labels.mixcr", picked.key, "order-independent")
+}
+
+TestSelectUpstream_NoTraceCountsAsOriginal := func() {
+	picked := labelColumn.selectUpstreamLabelColumn([
+		_col("labels.echo", _echoTrace),
+		_col("labels.imported", undefined)
+	])
+	test.isEqual("labels.imported", picked.key, "a column without a trace has zero steps")
+}
+
+TestSelectUpstream_TieBreaksOnKey := func() {
+	a := labelColumn.selectUpstreamLabelColumn([_col("labels.z", _mixcrTrace), _col("labels.a", _mixcrTrace)])
+	b := labelColumn.selectUpstreamLabelColumn([_col("labels.a", _mixcrTrace), _col("labels.z", _mixcrTrace)])
+	test.isEqual("labels.a", a.key, "tie on trace length resolves by key")
+	test.isEqual(a.key, b.key, "tie-break is canonical")
+}
+
+TestSelectUpstream_Single := func() {
+	picked := labelColumn.selectUpstreamLabelColumn([_col("labels.only", _echoTrace)])
+	test.isEqual("labels.only", picked.key, "single candidate is returned as-is")
+}
+
+TestSelectUpstream_Empty := func() {
+	test.isTrue(is_undefined(labelColumn.selectUpstreamLabelColumn([])), "no candidates yields undefined")
+}
