@@ -12,6 +12,7 @@ maps := import("@platforma-sdk/workflow-tengo:maps")
 text := import("text")
 
 clusterCols := import(":cluster-cols-conv")
+labelCol := import(":label-column")
 
 clusteringTpl := assets.importTemplate(":clustering")
 anonymizationTpl := assets.importTemplate(":anonymization")
@@ -95,9 +96,12 @@ wf.body(func(args) {
 		cdrh3FlankResidues: args.cdrh3FlankResidues
 	}
 
+	// The clonotype axis can carry several `pl7.app/label` columns. The producer writes
+	// one. Each downstream block that re-exports the label adds a copy over its own
+	// records. The bundle lists them in block-id order. Take the source column.
 	labelColumns := columns.getColumns("clonotypeKeyLabels")
 	if len(labelColumns) > 0 {
-		labelEntry := labelColumns[0]
+		labelEntry := labelCol.selectUpstreamLabelColumn(labelColumns)
 		labelsWf := pt.workflow().mem("2GiB").cpu(1)
 		labelsDf := labelsWf.frame(pt.p.column("clonotypeLabel", { spec: labelEntry.spec, data: labelEntry.data }))
 		labelsDf.select(pt.axis(clonotypeAxisName), pt.col("clonotypeLabel")).
