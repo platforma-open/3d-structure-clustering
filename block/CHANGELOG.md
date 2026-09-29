@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.2.4
+
+### Patch Changes
+
+- 923fbc1: Update SDK: PlAgDataTable no longer recreates its grid in an endless loop
+
 ## 1.2.3
 
 ### Patch Changes
