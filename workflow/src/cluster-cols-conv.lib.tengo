@@ -167,9 +167,12 @@ getClusterLinkSettings := func(clonotypeAxisSpec, clusterIdAxisSpec) {
 // xsv.importFile settings for abundances.tsv — per-[sampleId, clusterId]
 // count + fraction; feeds the bubble plot. Count keeps the upstream spec
 // name (e.g. `pl7.app/numberOfReads`); fraction renames to
-// `pl7.app/{read,uniqueMolecule}Fraction`.
+// `pl7.app/{read,uniqueMolecule,variant}Fraction`.
 getPerSampleClusterAbundanceSettings := func(sampleIdAxisSpec, clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit) {
 	fractionName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeFraction" : "pl7.app/readFraction"
+	if abundanceUnit == "variants" {
+		fractionName = "pl7.app/variantFraction"
+	}
 
 	ac := {
 		name: abundanceSpec.name,
@@ -217,6 +220,10 @@ getPerSampleClusterAbundanceSettings := func(sampleIdAxisSpec, clusterIdAxisSpec
 getClusterTotalAbundanceSettings := func(clusterIdAxisSpec, abundanceSpec, abundanceLabel, abundanceUnit) {
 	totalCountName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeCountTotal" : "pl7.app/readCountTotal"
 	totalFractionName := abundanceUnit == "molecules" ? "pl7.app/uniqueMoleculeFractionTotal" : "pl7.app/readFractionTotal"
+	if abundanceUnit == "variants" {
+		totalCountName = "pl7.app/variantCountTotal"
+		totalFractionName = "pl7.app/variantFractionTotal"
+	}
 
 	ac := {
 		name: abundanceSpec.name,

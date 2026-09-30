@@ -61,6 +61,10 @@ wf.body(func(args) {
 	abundanceSpec := abundanceColumn.spec
 	sampleIdAxisSpec := abundanceSpec.axesSpec[0]
 	abundanceUnit := text.contains(abundanceSpec.name, "uniqueMoleculeCount") ? "molecules" : "reads"
+	// Directly imported sets count records, whatever the column name says.
+	if abundanceSpec.annotations["pl7.app/abundance/unit"] == "variants" {
+		abundanceUnit = "variants"
+	}
 	abundanceLabel := abundanceSpec.annotations["pl7.app/label"]
 
 	// Anonymize the sampleId axis (idx 0) before passing abundance to clustering.
