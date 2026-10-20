@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering.software
 
+## 1.1.4
+
+### Patch Changes
+
+- 99f80da: Release every package through npm trusted publishing (OIDC) so each package's trusted publisher is used before it expires.
+
 ## 1.1.3
 
 ### Patch Changes
