@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.2.6
+
+### Patch Changes
+
+- 709fb8e: Per-sample cluster abundance columns no longer carry pl7.app/isAnchor, so cluster axes are not mistaken for dataset axes.
+
 ## 1.2.5
 
 ### Patch Changes
