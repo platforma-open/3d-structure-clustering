@@ -46,7 +46,7 @@
     "meta": {
       "title": "3D Structure Clustering",
       "logo": "file:../logos/block-logo.png",
-      "url": "https://github.com/platforma-open/milaboratories.3d-structure-clustering",
+      "url": "https://github.com/platforma-open/3d-structure-clustering",
       "support": "mailto:support@milaboratories.com",
       "description": "Clusters predicted antibody 3D structures by 3Di+AA similarity using FoldSeek; emits per-cluster centroid PDBs, cluster size and radius.",
       "longDescription": "file:../docs/description.md",
