@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-clustering
 
+## 1.2.7
+
+### Patch Changes
+
+- a3ac9c5: Point the block's repository link to the current GitHub repository.
+
 ## 1.2.6
 
 ### Patch Changes
