@@ -124,11 +124,13 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
    * names exactly the fields the kind's `BlockParams` declares, so exporting a
    * block to a template and applying that template round-trips.
    *
-   * `dataset` is absent on purpose: it is an anchor-bound selection, meaningless
-   * in another project. `cpu` and `mem` describe the machine a run gets, not the
-   * analysis. `customBlockLabel` and the view state are not configuration.
+   * `dataset` goes with them, so a project made from the template clusters the
+   * structures of the block the original one read. `cpu` and `mem` describe the
+   * machine a run gets, not the analysis. `customBlockLabel` and the view state
+   * are not configuration.
    */
   .templateParams((data) => ({
+    dataset: data.dataset,
     clusteringMode: data.clusteringMode,
     alignmentType: data.alignmentType,
     tmScoreThreshold: data.tmScoreThreshold,

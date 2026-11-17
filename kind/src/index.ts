@@ -1,4 +1,6 @@
 import { assertParamsObject, defineBlockKind } from "@platforma-sdk/block-kind";
+import type { DatasetSelection } from "@platforma-sdk/model";
+import { isDatasetSelection } from "@platforma-sdk/model";
 import { name, version } from "../package.json" with { type: "json" };
 
 /**
@@ -26,10 +28,17 @@ const ALIGNMENT_TYPES = ["cdrh3", "full_pdb_aa", "full_pdb"] as const;
  * This block's init-params contract — what a project template supplies to seed a
  * new instance.
  *
- * These are the five settings that change what the clustering produces. The
- * block's input selection is deliberately absent: `dataset` is an anchor-bound
- * reference (`DatasetSelection`) whose meaning depends on the anchor map of the
- * project that made it, so it cannot travel in a template. `cpu` and `mem` are
+ * These are the dataset the block clusters and the five settings that change
+ * what the clustering produces.
+ *
+ * `dataset` is the selection the dataset picker made: a reference to the
+ * predicted structures of an upstream block. A project template names its
+ * blocks, and a block created from one receives the reference pointing at the
+ * block made from the same entry, so a project made from a template clusters the
+ * structures the original one did. A template may leave it out and have the
+ * dataset picked afterwards.
+ *
+ * `cpu` and `mem` are
  * absent because they describe the machine a run gets, not the analysis. View
  * state — table state, the two graph states, the alignment model — and
  * `customBlockLabel` are not configuration and are absent for that reason.
@@ -38,6 +47,9 @@ const ALIGNMENT_TYPES = ["cdrh3", "full_pdb_aa", "full_pdb"] as const;
  * keeps a default behind each one.
  */
 export type BlockParams = {
+  /** The predicted structures to cluster, as the dataset picker emits them. */
+  dataset?: DatasetSelection;
+
   clusteringMode?: ClusteringMode;
   alignmentType?: AlignmentType;
   tmScoreThreshold?: number;
@@ -73,7 +85,7 @@ function finiteNumber(key: string, value: unknown): number {
  * than from typed code — the only point that can catch a hand-written entry
  * being wrong.
  *
- * Each field is checked only when present, because all five are optional. Keys
+ * Each field is checked only when present, because all six are optional. Keys
  * the contract does not name are dropped by not being read; refusing them would
  * mean holding a list of field names as strings that nothing keeps in step with
  * the type.
@@ -89,6 +101,13 @@ function parseInitializationParams(value: unknown): BlockParams {
   assertParamsObject(value);
 
   const params: BlockParams = {};
+
+  if (value.dataset !== undefined) {
+    if (!isDatasetSelection(value.dataset)) {
+      throw new Error("'dataset' must be a dataset selection, as the dataset picker emits it.");
+    }
+    params.dataset = value.dataset;
+  }
 
   if (value.clusteringMode !== undefined) {
     params.clusteringMode = oneOf("clusteringMode", value.clusteringMode, CLUSTERING_MODES);
