@@ -32,6 +32,8 @@ export const blockDataModel = new DataModelBuilder({ kind })
   .init(({ params }) => ({
     customBlockLabel: "",
 
+    dataset: params?.dataset,
+
     tmScoreThreshold: params?.tmScoreThreshold ?? 0.95,
     coverageThreshold: params?.coverageThreshold ?? 0.95,
     clusteringMode: params?.clusteringMode ?? ("easy-cluster" as const),
